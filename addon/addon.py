@@ -6,7 +6,7 @@ import bmesh
 import blf
 
 IMPORTED_OBJECT_NAME = "TARGET"
-TOLERANCE = 0.5
+TOLERANCE = 0.1
 
 
 class SubmitButton(bpy.types.Operator):
@@ -33,6 +33,9 @@ class SubmitButton(bpy.types.Operator):
         if imported_object is None or imported_object.type != "MESH":
             return {"CANCELLED"}
 
+        # Switch display to solid so face materials become visible after submitting
+        imported_object.display_type = "SOLID"
+
         imported_verts = [v.co.copy() for v in imported_object.data.vertices]
         user_verts = [
             v.co.copy()
@@ -56,26 +59,43 @@ class SubmitButton(bpy.types.Operator):
         )
         red = bpy.data.materials.get("Match_Red") or bpy.data.materials.new("Match_Red")
 
-        # Create the material
-        def set_mat_color(mat, color_tuple):
+        # Create the material based on a shader graph
+        def set_mat_color(mat, color_tuple, mix_factor=0.407, roughness=0.613):
             mat.diffuse_color = color_tuple
-            if mat.use_nodes and mat.node_tree is not None:
-                nodes = mat.node_tree.nodes
-                principled = None
-                for n in nodes:
-                    if n.type == "BSDF_PRINCIPLED":
-                        principled = n
-                        break
-                if principled is None:
-                    principled = nodes.new(type="ShaderNodeBsdfPrincipled")
-                    output = next(
-                        (n for n in nodes if n.type == "OUTPUT_MATERIAL"), None
-                    )
-                    if output is not None:
-                        mat.node_tree.links.new(
-                            principled.outputs["BSDF"], output.inputs["Surface"]
-                        )
-                principled.inputs["Base Color"].default_value = color_tuple
+            mat.use_nodes = True
+            nt = mat.node_tree
+            nodes = nt.nodes
+            links = nt.links
+
+            nodes.clear()
+
+            # Create nodes
+            output = nodes.new(type="ShaderNodeOutputMaterial")
+            output.location = (400, 0)
+
+            mix = nodes.new(type="ShaderNodeMixShader")
+            mix.location = (200, 0)
+            mix.inputs["Fac"].default_value = mix_factor
+
+            transp = nodes.new(type="ShaderNodeBsdfTransparent")
+            transp.location = (0, 100)
+            transp.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
+
+            glossy = nodes.new(type="ShaderNodeBsdfGlossy")
+            glossy.location = (0, -100)
+            glossy.inputs["Color"].default_value = color_tuple
+            glossy.inputs["Roughness"].default_value = roughness
+
+            links.new(transp.outputs["BSDF"], mix.inputs[1])
+            links.new(glossy.outputs["BSDF"], mix.inputs[2])
+            links.new(mix.outputs["Shader"], output.inputs["Surface"])
+
+            # For Eevee transparency in the viewport
+            try:
+                mat.blend_method = "BLEND"
+                mat.shadow_method = "NONE"
+            except Exception:
+                pass
 
         set_mat_color(green, (0.0, 1.0, 0.0, 1.0))
         set_mat_color(red, (1.0, 0.0, 0.0, 1.0))
@@ -150,8 +170,7 @@ def load_model():
 
     for obj in bpy.context.selected_objects:
         obj.name = IMPORTED_OBJECT_NAME
-        # Show faces so material changes are visible in the viewport
-        obj.display_type = "SOLID"
+        obj.display_type = "WIRE"
 
 
 def draw_lengths():
