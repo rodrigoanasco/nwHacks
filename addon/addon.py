@@ -5,20 +5,50 @@ import gpu
 import bmesh
 import blf
 
-addon_path = os.path.dirname(__file__)
-file_path = os.path.join(addon_path, "", "test.fbx")
-obj_file = open(file_path)
 
-bpy.ops.object.select_all(action="DESELECT")
-bpy.ops.wm.fbx_import(filepath=file_path)
+class Panel(bpy.types.Panel):
+    bl_label = "My Custom Panel"
+    bl_idname = "PT_SimplePanel"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "My Tools"  # Tab name
 
-for obj in bpy.context.selected_objects:
-    obj.name = "IMPORTED MODEL"
-    obj.display_type = "WIRE"
+    def draw(self, context):
+        layout = self.layout
+        if layout is None:
+            return
+        layout.label(text="Woah")
+        layout.operator("mesh.primitive_add_cube")
+
+
+def register_panel():
+    bpy.utils.register_class(Panel)
+
+
+def unregister_panel():
+    bpy.utils.unregister_class(Panel)
+
+
+def load_model():
+    addon_path = os.path.dirname(__file__)
+    file_path = os.path.join(addon_path, "", "test.fbx")
+
+    bpy.ops.object.select_all(action="DESELECT")
+    bpy.ops.wm.fbx_import(filepath=file_path)
+
+    for obj in bpy.context.selected_objects:
+        obj.name = "IMPORTED MODEL"
+        obj.display_type = "WIRE"
 
 
 def draw_lengths():
-    current_object = bpy.context.active_object
+    current_object = None
+    for obj in bpy.context.visible_objects:
+        if obj.name == "IMPORTED MODEL":
+            current_object = obj
+            break
+    if current_object == None or current_object.name != "IMPORTED MODEL":
+        return
     object_data = current_object.data
 
     region = bpy.context.region
@@ -44,9 +74,9 @@ def draw_lengths():
     b_mesh.free()
 
 
-bpy.types.Scene.my_draw_handler = bpy.types.SpaceView3D.draw_handler_add(
+load_model()
+bpy.types.Scene.edge_draw_handler = bpy.types.SpaceView3D.draw_handler_add(
     draw_lengths, (), "WINDOW", "POST_PIXEL"
 )
 
-
-bpy.context.area.tag_redraw()
+register_panel()
