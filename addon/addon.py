@@ -5,28 +5,96 @@ import gpu
 import bmesh
 import blf
 
+IMPORTED_OBJECT_NAME = "TARGET"
+
+def distance()
+
+class SubmitButton(bpy.types.Operator):
+    """tooltip goes here"""
+
+    bl_idname = "object.submit_operator"
+    bl_label = "Submit"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT"
+
+    def execute(self, context):
+        imported_object = None
+        user_objects = []
+
+        for obj in bpy.context.visible_objects:
+            if obj.name == IMPORTED_OBJECT_NAME:
+                imported_object = obj
+            else:
+                user_objects.append(obj)
+
+        if imported_object is None or imported_object.type != "MESH":
+            return {"COULDN'T FIND IMPORTED OBJECT"}
+
+        imported_object_vertices = []
+        for vertex in imported_object.data.vertices:
+            imported_object_vertices.append(vertex.co)
+
+        user_object_vertices = []
+        for user_object in user_objects:
+            for vertex in user_object.data.vertices:
+                user_object_vertices.append(vertex.co)
+
+        if len(user_object_vertices) == 0:
+            return {"NO USER OBJECTS"}
+      
+        for i in range(len(user_object_vertices)):
+            for j in range(len(imported_object_vertices)):
+                pass
+
+        return {"FINISHED"}
+
+
+class HintButton(bpy.types.Operator):
+    """tooltip goes here"""
+
+    bl_idname = "object.hint_operator"
+    bl_label = "Hint"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT"
+
+    def execute(self, context):
+        print(f"presssed: hint")
+
+        return {"FINISHED"}
+
 
 class Panel(bpy.types.Panel):
-    bl_label = "My Custom Panel"
+    bl_label = "Panel"
     bl_idname = "PT_SimplePanel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "My Tools"  # Tab name
+    bl_category = "NAME OF TOOL"
 
     def draw(self, context):
         layout = self.layout
         if layout is None:
             return
-        layout.label(text="Woah")
-        layout.operator("mesh.primitive_add_cube")
+        layout.operator(HintButton.bl_idname, text="Hint")
+        layout.operator(SubmitButton.bl_idname, text="Submit")
+
+
+classes = [Panel, HintButton, SubmitButton]
 
 
 def register_panel():
-    bpy.utils.register_class(Panel)
+    for ui_class in classes:
+        bpy.utils.register_class(ui_class)
 
 
 def unregister_panel():
-    bpy.utils.unregister_class(Panel)
+    for ui_class in classes:
+        bpy.utils.unregister_class(ui_class)
 
 
 def load_model():
@@ -37,17 +105,17 @@ def load_model():
     bpy.ops.wm.fbx_import(filepath=file_path)
 
     for obj in bpy.context.selected_objects:
-        obj.name = "IMPORTED MODEL"
+        obj.name = IMPORTED_OBJECT_NAME
         obj.display_type = "WIRE"
 
 
 def draw_lengths():
     current_object = None
     for obj in bpy.context.visible_objects:
-        if obj.name == "IMPORTED MODEL":
+        if obj.name == IMPORTED_OBJECT_NAME:
             current_object = obj
             break
-    if current_object == None or current_object.name != "IMPORTED MODEL":
+    if current_object == None or current_object.name != IMPORTED_OBJECT_NAME:
         return
     object_data = current_object.data
 
