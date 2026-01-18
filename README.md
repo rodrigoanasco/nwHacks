@@ -1,5 +1,5 @@
 # bleet
-**Grind Smarter.**
+**Grind Blender Smarter.**
 <br>
 <p align=center>
 <img src=rm_img/updated_updated_logo.png/>
