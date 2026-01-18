@@ -16,6 +16,7 @@ import threading
 import langchain
 from langchain.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_ollama import ChatOllama
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers import StrOutputParser
 import PIL
 from PIL import Image
@@ -23,13 +24,13 @@ from io import BytesIO
 import base64
 from datetime import datetime, timezone
 import requests
-import logging
+from dotenv import load_dotenv
 
 
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
 
-time_sums = 0
+total_time = 0
 
 hints_remaining = 3
 submitted = False
@@ -38,6 +39,10 @@ bpy.types.Scene.llm_response = bpy.props.StringProperty(default="")
 bpy.types.Scene.show_llm_in_panel = bpy.props.BoolProperty(default=False)
 # Track whether an LLM response is currently being generated
 bpy.types.Scene.llm_loading = bpy.props.BoolProperty(default=False)
+# Title/header to show above the LLM response (can be used for hints vs submit feedback)
+bpy.types.Scene.llm_response_title = bpy.props.StringProperty(default="")
+# When true, replace the entire UI panel with a loading label / LLM response
+bpy.types.Scene.replace_with_llm = bpy.props.BoolProperty(default=False)
 
 # Globals used to communicate between the worker thread and the main thread
 llm_thread_result = None
@@ -45,12 +50,29 @@ llm_thread_done = False
 llm_thread_lock = threading.Lock()
 
 
+def filtered_operators_len_and_string():
+    operators_to_filter = ["Select", "Add Cube", "Edit Mode", "Submit"]
+    filtered_operators = []
+    for operator in bpy.context.window_manager.operators:
+        if not operator.bl_label in operators_to_filter:
+            filtered_operators.append(operator.bl_label)
+    number_of_actions = len(filtered_operators)
+
+    operators_string = ""
+    for operator in filtered_operators:
+        operators_string += operator + "\n"
+
+    return number_of_actions, operators_string
+
+
 def read_info_json():
     info_json_path = os.path.join(EXTRA_INFORMATION_JSON_DIR, "info.json")
     with open(info_json_path, "r") as f:
         info_data = json.load(f)
-    return info_data.get("expectedCompletionTime"), info_data.get(
-        "expectedNumOfActions"
+    return (
+        info_data.get("expectedCompletionTime"),
+        info_data.get("expectedNumOfActions"),
+        info_data.get("questionName"),
     )
 
 
@@ -169,7 +191,6 @@ def send_llm_message(prompt: str, base64_image: str):
     chain = llm | StrOutputParser()
 
     output = chain.invoke(message_history)
-    print(output)
 
     message_history.append(AIMessage(content=output))
     return str(output)
@@ -255,6 +276,28 @@ def reset_viewport():
                         pass
             area.tag_redraw()
 
+    # Clear any replacement state so the UI returns to normal
+    try:
+        for sc in bpy.data.scenes:
+            try:
+                sc.replace_with_llm = False
+            except Exception:
+                pass
+            try:
+                sc.llm_response = ""
+            except Exception:
+                pass
+            try:
+                sc.llm_loading = False
+            except Exception:
+                pass
+            try:
+                sc.llm_response_title = ""
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     submitted = False
 
 
@@ -270,11 +313,9 @@ class SubmitButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
-        global submitted, time_sums, start_time
+        global submitted, start_time, total_time
 
-        expectedCompletionTime, expectedNumOfActions = read_info_json()
-        print(expectedCompletionTime)
-        print(expectedNumOfActions)
+        expectedCompletionTime, expectedNumOfActions, questionName = read_info_json()
 
         if submitted:
             reset_viewport()
@@ -417,23 +458,15 @@ class SubmitButton(bpy.types.Operator):
                         space.shading.type = "MATERIAL"
                 area.tag_redraw()
 
-        # Compute elapsed time for this submit attempt
+        # Compute elapsed time for this submit attempt (single start -> now)
         elapsed = get_current_timestamp() - start_time
-
-        if all_faces_ok:
-            # Total time is accumulated time plus this final interval
-            total_time = time_sums + elapsed
-        else:
-            # Add elapsed to accumulated time and continue timing
-            time_sums += elapsed
-            # restart interval timing from now
-            start_time = get_current_timestamp()
+        total_time = elapsed
 
         submitted = True
         if not all_faces_ok:
             context.scene.submit_button_text = "Try Again"
 
-        number_of_actions = bpy.context.window_manager.operators
+        number_of_actions, operators_string = filtered_operators_len_and_string()
         if all_faces_ok:
             # Prepare an LLM prompt summarizing the submission for feedback
             prompt = f"""
@@ -441,9 +474,24 @@ class SubmitButton(bpy.types.Operator):
 
           Here are the number of actions they took to create what is shown in the image: {number_of_actions}
 
-          Please provide concise feedback (at most 2 sentences) about how the user can streamline the workflow for
-          creating the model.
+          Here are the exact actions they took to create what is shown in the image: {operators_string}
+
+          This is the expected number of steps, if they are below this then that's even better: {expectedNumOfActions}
+
+          Use the following rules when providing feedback:
+            - Provide it concisely, 3 sentences max.
+            - If the user has already done a good job, has met the number of expected steps or gone below it,
+            and there isn't anything else to call them out on, then you're not required to always provide feedback
+            on things they did wrong. If everything is good, tell them that.
+            - Since all the faces are green you don't have to talk about tolerances, that has already been checked.
+            - Do not suggest modifiers, this Blender addon doesn't take those into account.
+            - Don't overcomplicate the tool usage. If the user used more tools than they were supposed to, tell them
+            the simplest route they could have taken. Remember to look at the image, if the image looks like all the
+            faces could be extruded, then tell the user that. Don't suggest knife tools or more complicated things.
+            - Do not say "the user" in the answer. You are directly talking to them.
           """
+
+            print(prompt)
 
             # Capture screenshot on the main thread (Blender API must not be called from worker)
             try:
@@ -455,6 +503,20 @@ class SubmitButton(bpy.types.Operator):
             # Prepare scene state and redraw so the UI shows loading
             context.scene.llm_response = ""
             context.scene.llm_loading = True
+            # Set title/header for the LLM response (submit feedback)
+            try:
+                context.scene.llm_response_title = (
+                    "Congrats, you finished! Here's some feedback:"
+                )
+            except Exception:
+                context.scene.llm_response_title = (
+                    "Congrats, you finished! Here's some feedback:"
+                )
+            # Replace the entire panel with the loading label followed by the LLM response
+            try:
+                context.scene.replace_with_llm = True
+            except Exception:
+                context.scene.replace_with_llm = True
             for area in bpy.context.screen.areas:
                 if area.type == "VIEW_3D":
                     area.tag_redraw()
@@ -469,25 +531,25 @@ class SubmitButton(bpy.types.Operator):
             except Exception as e:
                 print("Failed to register poll timer on submit:", e)
 
-        # Include timing information when the submission passed
+        # On success, reset start_time for a fresh session
         if all_faces_ok:
-            # send total time in seconds (as a string for consistency)
-            submission_info["time_seconds"] = str(total_time)
-            # reset accumulated time for a fresh session
-            time_sums = 0
             start_time = get_current_timestamp()
 
+        score = (
+            100
+            * ((expectedNumOfActions / number_of_actions) * 0.5)
+            * ((expectedCompletionTime / total_time) * 0.5)
+        )
+
         submission_info = {
-            "userId": str(123),
-            "questionName": "House_1",
+            "questionName": questionName,
             "passed": str(True if all_faces_ok else False),
-            "number_of_actions": str(number_of_actions),
-            "time_taken": str(total_time),
+            "numberOfActions": str(number_of_actions),
+            "timeTaken": str(total_time),
+            "score": str(score),
         }
 
-        post_request_data = requests.post(
-            "http://localhost:3000/api/submit", json=submission_info
-        )
+        requests.post("http://localhost:3000/api/submit", json=submission_info)
 
         return {"FINISHED"}
 
@@ -539,14 +601,17 @@ class HintButton(bpy.types.Operator):
         }
 
         # Get the actions the user has taken up to this point
-        actions = ""
-        for operator in bpy.context.window_manager.operators:
-            actions += operator.bl_idname + "\n"
+        actions_length, operators_string = filtered_operators_len_and_string()
+        _, expectedNumOfActions, __ = read_info_json()
 
         prompt = f"""
-        The user is current stuck on create a 3D model. These are the actions they have taken so far:
+        The user is current stuck on create a 3D model.
 
-        {actions}
+        These are the number of actions taken so far: {actions_length}
+
+        This is the expected number of actions they should take at a maximum (an estimate): {expectedNumOfActions}
+
+        These are the actions they have taken: {operators_string}
 
         Here is some information about the object they are trying to model. Everything is given in (x, y, z) coordinates according to Blender's standards:
 
@@ -558,7 +623,26 @@ class HintButton(bpy.types.Operator):
 
         Please provide them with information about how they can continue on. Do not give them the answer.
 
+        Use the following rules when providing a hint:
+            - Provide it concisely, 3 sentences max.
+            - If the user has overcomplicated the actions or taken to many (above the expected) then let them know
+            so they can backtrack.
+            - Do not suggest modifiers, this Blender addon doesn't take those into account.
+            - Don't overcomplicate the tool usage. If the user used more tools than they were supposed to, tell them
+            the simplest route they could possibly take. Remember to look at the image, if the image looks like all the
+            faces could be extruded, then hint at that when telling the user.
+            - Do not say "the user" in the answer. You are directly talking to them.
+            - If the vertices are equal, then try comparing the positions of the objects. Is the scale, position, or rotation wrong?
+            Use this, if applicable, in the hint as well.
+            - If in the screenshot there are red and green faces then here's what it means. Red faces means the vertices haven't
+            met the tolerance of {TOLERANCE}. Green faces means they have met the tolerance. If the tolerance is off then it may be
+            because the face is in the wrong position, rotation, or scale. Again, if applicable, try using this in the hint.
+            - If the number of vertices between the objects is equal then don't suggest adding more through tools that do (e.g extrude,
+            knife, etc). Instead, they have to modify the object somehow.
+            - Don't ask about providing further assistance. You're just providing hints.
         """
+
+        print(f"Hint prompt: {prompt}")
 
         # Capture screenshot on the main thread (Blender API must not be called from worker)
         try:
@@ -570,6 +654,10 @@ class HintButton(bpy.types.Operator):
         # Prepare scene state and redraw
         context.scene.llm_response = ""
         context.scene.llm_loading = True
+        try:
+            context.scene.llm_response_title = "Hint:"
+        except Exception:
+            context.scene.llm_response_title = "Hint:"
         for area in bpy.context.screen.areas:
             if area.type == "VIEW_3D":
                 area.tag_redraw()
@@ -615,13 +703,61 @@ class Panel(bpy.types.Panel):
         layout = self.layout
         if layout is None:
             return
+        # If the panel should be entirely replaced with the LLM output,
+        # show only a "Loading..." label while the LLM is running, then
+        # switch to the LLM response text once available.
+        if getattr(context.scene, "replace_with_llm", False):
+            if getattr(context.scene, "llm_loading", False):
+                layout.label(text="Loading...")
+                return
+
+            if context.scene.llm_response:
+                # Header shown before the LLM feedback
+                title = (
+                    context.scene.llm_response_title
+                    if getattr(context.scene, "llm_response_title", "")
+                    else "Congrats, you finished! Here's some feedback:"
+                )
+                layout.label(text=title)
+                max_chars = 80
+                wrapped_lines = []
+                # Preserve paragraphs and wrap by words
+                for para in context.scene.llm_response.splitlines():
+                    words = para.split()
+                    if not words:
+                        wrapped_lines.append("")
+                        continue
+                    cur_words = []
+                    cur_len = 0
+                    for w in words:
+                        wlen = len(w)
+                        if cur_len == 0:
+                            cur_words = [w]
+                            cur_len = wlen
+                        elif cur_len + 1 + wlen <= max_chars:
+                            cur_words.append(w)
+                            cur_len += 1 + wlen
+                        else:
+                            wrapped_lines.append(" ".join(cur_words))
+                            cur_words = [w]
+                            cur_len = wlen
+                    if cur_words:
+                        wrapped_lines.append(" ".join(cur_words))
+
+                for line in wrapped_lines:
+                    layout.label(text=line)
+            else:
+                layout.label(text="No response yet")
+
+            return
+
+        # Default panel UI
         layout.label(text=f"Hints remaining: {hints_remaining}")
         layout.operator(HintButton.bl_idname, text="Hint")
 
-        # Show loading label while LLM generation is in progress
+        # Show a small loading label if an LLM call is in progress (non-replacing mode)
         if getattr(context.scene, "llm_loading", False):
             layout.label(text="Loading...")
-            # continue rendering other UI elements while keeping user informed
 
         if context.scene.llm_response:
             layout.label(text="LLM response available")
@@ -630,6 +766,13 @@ class Panel(bpy.types.Panel):
             layout.operator(LLMResponsePopup.bl_idname, text=btn_text)
             # If toggled, render wrapped response inline
             if show:
+                # Header shown before the LLM feedback when shown inline
+                title = (
+                    context.scene.llm_response_title
+                    if getattr(context.scene, "llm_response_title", "")
+                    else "Congrats, you finished! Here's some feedback:"
+                )
+                layout.label(text=title)
                 max_chars = 80
                 wrapped_lines = []
                 # Preserve existing paragraphs and wrap each by words
@@ -661,6 +804,7 @@ class Panel(bpy.types.Panel):
 
                 for line in wrapped_lines:
                     layout.label(text=line)
+
         layout.operator(
             SubmitButton.bl_idname, text=bpy.context.scene.submit_button_text
         )
@@ -675,18 +819,11 @@ def register_panel():
     for sc in bpy.data.scenes:
         sc.submit_button_text = "Submit"
         # initialize llm_response for existing scenes
-        try:
-            sc.llm_response = ""
-        except Exception:
-            pass
-        try:
-            sc.show_llm_in_panel = False
-        except Exception:
-            pass
-        try:
-            sc.llm_loading = False
-        except Exception:
-            pass
+        sc.llm_response = ""
+        sc.show_llm_in_panel = False
+        sc.llm_loading = False
+        sc.replace_with_llm = False
+        sc.llm_response_title = ""
 
 
 def unregister_panel():
@@ -759,6 +896,7 @@ os.makedirs(EXTRA_INFORMATION_JSON_DIR, exist_ok=True)
 
 
 class ConvertRequest(BaseModel):
+    questionName: str
     expectedCompletionTime: int
     expectedNumOfActions: int
     objects: list
@@ -781,6 +919,7 @@ def convert_json_to_fbx(payload: ConvertRequest):
             {
                 "expectedCompletionTime": payload.dict()["expectedCompletionTime"],
                 "expectedNumOfActions": payload.dict()["expectedNumOfActions"],
+                "questionName": payload.dict()["questionName"],
             },
             f,
             indent=2,

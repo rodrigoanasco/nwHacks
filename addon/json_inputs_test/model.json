@@ -1,4 +1,5 @@
 {
+  "questionName": "House_1",
   "expectedCompletionTime": 10,
   "expectedNumOfActions": 20,
   "objects": [

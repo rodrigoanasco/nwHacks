@@ -1,4 +1,5 @@
 {
   "expectedCompletionTime": 10,
-  "expectedNumOfActions": 20
+  "expectedNumOfActions": 3,
+  "questionName": "House_1"
 }

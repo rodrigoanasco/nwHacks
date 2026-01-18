@@ -6,7 +6,7 @@ import { getKindeServerSession } from "@kinde-oss/kinde-auth-nextjs/server";
 
 
 export async function POST(req: Request) {
-  const { questionName, passed, numberOfActions, timeTaken, Score } = await req.json();
+  const { questionName, passed, numberOfActions, timeTaken, score } = await req.json();
 
   const db = await getDb();
   // 2) Get userId from Kinde (or default)
