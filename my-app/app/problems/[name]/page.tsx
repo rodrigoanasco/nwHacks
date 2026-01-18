@@ -1,13 +1,19 @@
 "use client";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-export default function CurrentQuestion() {
+export default function CurrentQuestion({ searchParams }) {
+  let difficulty = useSearchParams().get("difficulty");
+  difficulty = difficulty?.charAt(0).toUpperCase() + difficulty?.slice(1);
+  console.log(difficulty);
+
   const currentQuestionName = useParams().name;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,6 +139,29 @@ export default function CurrentQuestion() {
 
   return (
     <div className="flex flex-col max-w-min mx-auto justify-center h-screen items-center gap-4">
+      <div>
+        <p>
+          <b>Name:</b> {currentQuestionName}
+        </p>
+        <p>
+          <b>Difficulty:</b>{" "}
+          {difficulty === "Easy" && (
+            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+              Easy
+            </Badge>
+          )}
+          {difficulty === "Medium" && (
+            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+              Medium
+            </Badge>
+          )}
+          {difficulty === "Hard" && (
+            <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+              Hard
+            </Badge>
+          )}
+        </p>
+      </div>
       <div ref={containerRef}></div>
       <Button className="w-full" onClick={loadInBlenderCallback}>
         {!loadingInBlender ? "Load in Blender" : "Loading..."}

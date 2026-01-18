@@ -39,13 +39,6 @@ type ProblemRow = {
   attemps: number;
 };
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "U";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
 export default function DashboardClient() {
   const [rows, setRows] = useState<ProblemRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,23 +94,6 @@ export default function DashboardClient() {
       cancelled = true;
     };
   }, []);
-
-  const buttonCallback = async (name: string) => {
-    const apiRequestBody = {
-      name: name,
-      userId: "default",
-    };
-    await fetch("/api/question", {
-      method: "POST", // Specify the method
-      headers: {
-        "Content-Type": "application/json", // Indicate the content type
-      },
-      body: JSON.stringify(apiRequestBody),
-    });
-
-    toast.success("3D model has been loaded, open up blender please.");
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <main className="pt-20 px-6">
@@ -131,7 +107,7 @@ export default function DashboardClient() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Model Name</TableHead>
+                  <TableHead>Name</TableHead>
                   <TableHead>Difficulty</TableHead>
                   <TableHead>Attempts</TableHead>
                   <TableHead>Completed</TableHead>
@@ -142,7 +118,16 @@ export default function DashboardClient() {
                 {rows.map((problem, index) => (
                   <TableRow key={`${problem.name}-${index}`}>
                     <TableCell className="font-medium">
-                      <Link href={`/${problem.name}`}>{problem.name}</Link>
+                      <Link
+                        href={{
+                          pathname: `/problems/${problem.name}`,
+                          query: {
+                            difficulty: problem.difficulty,
+                          },
+                        }}
+                      >
+                        {problem.name}
+                      </Link>
                     </TableCell>
 
                     <TableCell>

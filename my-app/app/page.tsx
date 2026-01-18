@@ -1,51 +1,32 @@
-import { redirect } from "next/navigation";
-import { getKindeServerSession } from "@kinde-oss/kinde-auth-nextjs/server";
-import { getDb } from "@/lib/db/mongodb";
-import { COLLECTIONS } from "@/lib/db/collections";
-import DashboardClient from "./DashboardClient";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, Shapes } from "lucide-react";
 
-export default async function DashboardPage() {
-  const userId = "default";
+export default function Page() {
+  return (
+    <section className="relative flex min-h-screen items-center justify-center overflow-hidden px-6">
+      <div className="relative z-10 mx-auto max-w-3xl text-center">
+        <div className="mb-8 flex justify-center">
+          <div className="animate-float rounded-2xl bg-card p-4 shadow-elevated">
+            <Shapes className="h-12 w-12 text-primary" />
+          </div>
+        </div>
 
-  const userName = "User";
+        <h1 className="mb-4 text-5xl font-bold leading-tight tracking-tight text-foreground ">
+          Practice 3D modeling.
+        </h1>
 
-  const db = await getDb();
+        <p className="mx-auto mb-10 max-w-lg text-lg text-muted-foreground">
+          Short, focused challenges to build real skills in Blender and 3D.
+        </p>
 
-  const progressCol = db.collection(COLLECTIONS.USER_PROGRESS);
-
-  // 1) Check if user already exists
-  let progressDoc = await progressCol.findOne(
-    { userId },
-    { projection: { _id: 0, userId: 1, userName: 1, questions: 1 } },
+        <Link href="/problems" className="inline-block">
+          <Button size="lg" className="gap-2">
+            View problems
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </Link>
+      </div>
+    </section>
   );
-
-  // 2) If not, build default questions from QUESTIONS collection and insert
-  if (!progressDoc) {
-    const allQuestions = await db
-      .collection(COLLECTIONS.QUESTIONS)
-      .find({}, { projection: { _id: 0, name: 1 } })
-      .toArray();
-
-    const questionsInit = allQuestions.map((q) => ({
-      name: q.name,
-      attempts: 0,
-      passed: false,
-    }));
-
-    await progressCol.insertOne({
-      userId,
-      userName,
-      questions: questionsInit,
-    });
-
-    // fetch it back (so the page has it in memory if you want to pass it down)
-    progressDoc = await progressCol.findOne(
-      { userId },
-      { projection: { _id: 0, userId: 1, userName: 1, questions: 1 } },
-    );
-  }
-
-  // now you have progressDoc available
-
-  return <DashboardClient />;
 }
