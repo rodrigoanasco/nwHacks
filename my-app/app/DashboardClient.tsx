@@ -16,7 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { LogoutLink } from "@kinde-oss/kinde-auth-nextjs/components";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { redirect } from "next/navigation";
+import { toast } from "sonner";
 
 type QuestionListItem = {
   name: string;
@@ -33,7 +36,7 @@ type ProblemRow = {
   name: string;
   difficulty: string;
   completed: boolean;
-  attempts: number;
+  attemps: number;
 };
 
 function initials(name: string) {
@@ -64,26 +67,22 @@ export default function DashboardClient({ userName }: { userName: string }) {
         if (!qRes.ok) throw new Error(`question/all failed: ${qRes.status}`);
         if (!pRes.ok) throw new Error(`progress failed: ${pRes.status}`);
 
-        const qJson: { questions: QuestionListItem[] } = await qRes.json();
+        const qJson: { questionBank: QuestionListItem[] } = await qRes.json();
         const pJson: { userId: string; questions: ProgressQuestion[] } =
           await pRes.json();
 
-        const progressMap = new Map<string, ProgressQuestion>();
-        for (const q of pJson.questions ?? []) {
-          progressMap.set(q.name, q);
-        }
+        console.log(qJson);
+        console.log(pJson);
 
-        const merged: ProblemRow[] = (qJson.questions ?? []).map((q) => {
-          const prog = progressMap.get(q.name);
-          return {
-            name: q.name,
-            difficulty: q.difficulty ?? "unknown",
-            completed: prog?.passed ?? false,
-            attempts: prog?.attempts ?? 0,
+        for (let i = 0; i < qJson.questionBank.length; ++i) {
+          const newRow: ProblemRow = {
+            name: qJson.questionBank[i].name,
+            difficulty: qJson.questionBank[i].difficulty,
+            completed: pJson.questions[i].passed,
+            attemps: pJson.questions[i].attempts,
           };
-        });
-
-        if (!cancelled) setRows(merged);
+          rows.push(newRow);
+        }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load dashboard data");
       } finally {
@@ -97,35 +96,24 @@ export default function DashboardClient({ userName }: { userName: string }) {
     };
   }, []);
 
-  const avatarFallback = useMemo(() => initials(userName), [userName]);
+  const buttonCallback = async (name: string) => {
+    const apiRequestBody = {
+      name: name,
+      userId: "default",
+    };
+    await fetch("/api/question", {
+      method: "POST", // Specify the method
+      headers: {
+        "Content-Type": "application/json", // Indicate the content type
+      },
+      body: JSON.stringify(apiRequestBody),
+    });
+
+    toast.success("3D model has been loaded, open up blender please.");
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
-          <div className="flex-1">
-            <div className="text-sm text-muted-foreground">Welcome</div>
-            <div className="font-medium">{userName}</div>
-          </div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="cursor-pointer" aria-label="Open user menu">
-                <Avatar>
-                  <AvatarImage src="https://github.com/shadcn.png" alt="User" />
-                  <AvatarFallback>{avatarFallback}</AvatarFallback>
-                </Avatar>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <LogoutLink>Sign out</LogoutLink>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </nav>
-
       <main className="pt-20 px-6">
         <div className="mx-auto max-w-6xl">
           <h1 className="text-3xl font-bold mb-8 text-foreground">Problems</h1>
@@ -147,7 +135,16 @@ export default function DashboardClient({ userName }: { userName: string }) {
               <TableBody>
                 {rows.map((problem) => (
                   <TableRow key={problem.name}>
-                    <TableCell className="font-medium">{problem.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Button
+                        variant={"link"}
+                        onClick={() => {
+                          buttonCallback(problem.name);
+                        }}
+                      >
+                        {problem.name}
+                      </Button>
+                    </TableCell>
 
                     <TableCell>
                       <span
@@ -155,10 +152,10 @@ export default function DashboardClient({ userName }: { userName: string }) {
                           problem.difficulty === "easy"
                             ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                             : problem.difficulty === "medium"
-                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                            : problem.difficulty === "hard"
-                            ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                            : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                              : problem.difficulty === "hard"
+                                ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                                : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
                         }`}
                       >
                         {problem.difficulty.charAt(0).toUpperCase() +
@@ -166,7 +163,7 @@ export default function DashboardClient({ userName }: { userName: string }) {
                       </span>
                     </TableCell>
 
-                    <TableCell>{problem.attempts}</TableCell>
+                    <TableCell>{problem.attemps}</TableCell>
 
                     <TableCell>
                       {problem.completed ? (

@@ -2,22 +2,19 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/mongodb";
 import { COLLECTIONS } from "@/lib/db/collections";
 import type { UserProgressDoc } from "@/lib/db/types";
-import { getKindeServerSession } from "@kinde-oss/kinde-auth-nextjs/server";
 
 
 export async function POST(req: Request) {
   const { questionName, passed, numberOfActions, timeTaken, score } = await req.json();
 
-  const db = await getDb();
-  // 2) Get userId from Kinde (or default)
-  const { isAuthenticated, getUser } = getKindeServerSession();
-  const authed = await isAuthenticated();
+  console.log(questionName);
+  console.log(passed);
+  console.log(numberOfActions);
+  console.log(timeTaken);
+  console.log(score);
 
-  let userId = "default";
-  if (authed) {
-    const user = await getUser();
-    if (user?.id) userId = user.id;
-  }
+  const db = await getDb();
+  const userId = "default";
   const col = db.collection<UserProgressDoc>(COLLECTIONS.USER_PROGRESS);
 
   // try update existing entry
@@ -30,11 +27,12 @@ export async function POST(req: Request) {
   );
 
   if (res1.matchedCount === 0) {
+
     // push new entry (upsert user doc)
     await col.updateOne(
       { userId },
       {
-        $setOnInsert: { userId, questions: [] },
+        $setOnInsert: { userId },
         $push: {
           questions: { name: questionName, attempts: 1, passed },
         },

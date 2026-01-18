@@ -549,6 +549,8 @@ class SubmitButton(bpy.types.Operator):
             "score": str(score),
         }
 
+        print(submission_info)
+
         requests.post("http://localhost:3000/api/submit", json=submission_info)
 
         return {"FINISHED"}
@@ -834,11 +836,63 @@ def unregister_panel():
 def load_model(path: str):
     print(path)
     bpy.ops.object.select_all(action="DESELECT")
-    bpy.ops.wm.fbx_import(filepath=path)
 
+    imported = False
+    # Try to run the FBX importer with a UI override so the operator poll passes.
+    try:
+        for window in bpy.context.window_manager.windows:
+            screen = window.screen
+            for area in screen.areas:
+                if area.type == "VIEW_3D":
+                    # Find a window region to use in the override
+                    region = None
+                    for reg in area.regions:
+                        if reg.type == "WINDOW":
+                            region = reg
+                            break
+                    override = {
+                        "window": window,
+                        "screen": screen,
+                        "area": area,
+                        "region": region,
+                    }
+                    try:
+                        bpy.ops.import_scene.fbx(override, filepath=path)
+                        imported = True
+                        break
+                    except Exception as e:
+                        print("import_scene.fbx with override failed:", e)
+            if imported:
+                break
+
+        # Fallback - try without override
+        if not imported:
+            try:
+                bpy.ops.import_scene.fbx(filepath=path)
+                imported = True
+            except Exception as e:
+                print("import_scene.fbx direct call failed:", e)
+
+        # Final fallback to older operator name if present
+        if not imported:
+            try:
+                bpy.ops.wm.fbx_import(filepath=path)
+                imported = True
+            except Exception as e:
+                print("wm.fbx_import fallback failed:", e)
+    except Exception as e:
+        print("FBX import failed:", e)
+
+    # Name the imported objects and set display
     for obj in bpy.context.selected_objects:
-        obj.name = IMPORTED_OBJECT_NAME
-        obj.display_type = "WIRE"
+        try:
+            obj.name = IMPORTED_OBJECT_NAME
+        except Exception:
+            pass
+        try:
+            obj.display_type = "WIRE"
+        except Exception:
+            pass
 
 
 def draw_lengths():
@@ -953,6 +1007,24 @@ def convert_json_to_fbx(payload: ConvertRequest):
             },
         )
 
+    fbx_path = os.path.join(FBX_OUTPUT_DIR, "model.fbx")
+
+    # Blender's `bpy` API must run on the main thread. The FastAPI handler
+    # runs in a worker thread, so schedule the import on the main thread
+    # using a timer callback instead of calling `load_model` directly.
+    def _load_model_cb():
+        try:
+            load_model(fbx_path)
+        except Exception as e:
+            print("Failed to load model on main thread:", e)
+        # Return None to unregister the timer after one run
+        return None
+
+    try:
+        bpy.app.timers.register(_load_model_cb, first_interval=0.1)
+    except Exception as e:
+        print("Failed to register model loader timer:", e)
+
     return {
         "status": "success",
         "job_id": job_id,
@@ -980,21 +1052,21 @@ def _is_port_in_use(host: str, port: int) -> bool:
 import time
 
 
-def wait_for_model_fbx():
-    """Wait until model.fbx exists, checking every 0.5 seconds."""
-    fbx_path = os.path.join(FBX_OUTPUT_DIR, "model.fbx")
-    max_wait = 60  # Maximum 60 seconds
-    elapsed = 0
-    print(os.path.exists(fbx_path))
-    while not os.path.exists(fbx_path) and elapsed < max_wait:
-        time.sleep(1.5)
-        elapsed += 1.5
+# def wait_for_model_fbx():
+# """Wait until model.fbx exists, checking every 0.5 seconds."""
+# fbx_path = os.path.join(FBX_OUTPUT_DIR, "model.fbx")
+# max_wait = 60  # Maximum 60 seconds
+# elapsed = 0
+# print(os.path.exists(fbx_path))
+# while not os.path.exists(fbx_path) and elapsed < max_wait:
+#     time.sleep(1.5)
+#     elapsed += 1.5
 
-    time.sleep(2)
-    if os.path.exists(fbx_path):
-        load_model(fbx_path)
-    else:
-        print(f"Timeout waiting for model.fbx after {max_wait} seconds")
+# time.sleep(2)
+# if os.path.exists(fbx_path):
+#     load_model(fbx_path)
+# else:
+#     print(f"Timeout waiting for model.fbx after {max_wait} seconds")
 
 
 register_panel()
@@ -1016,4 +1088,4 @@ else:
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete(use_global=False)
 
-wait_for_model_fbx()
+# wait_for_model_fbx()

@@ -10,8 +10,8 @@ except Exception:
 
 # Use fixed paths inside the addon folder
 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-fbx_path = os.path.join(base_dir, "easy.fbx")
-json_path = os.path.join(base_dir, "easy.json")
+fbx_path = os.path.join(base_dir, "hard.fbx")
+json_path = os.path.join(base_dir, "hard.json")
 
 
 # Start from a clean scene without removing view layers (avoids missing view_layer in background)
