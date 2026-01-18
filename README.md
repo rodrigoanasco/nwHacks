@@ -2,7 +2,7 @@
 **Grind Smarter.**
 <br>
 <p align=center>
-<img src=rm_img/logoupdated.png/>
+<img src=rm_img/updated_updated_logo.png/>
 </p>
 
 ## Inspiration
