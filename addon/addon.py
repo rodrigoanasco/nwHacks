@@ -29,10 +29,6 @@ import logging
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
 
-expected_completion_time = 0
-expected_number_of_actions = 0
-
-total_time = 0
 time_sums = 0
 
 hints_remaining = 3
@@ -47,6 +43,15 @@ bpy.types.Scene.llm_loading = bpy.props.BoolProperty(default=False)
 llm_thread_result = None
 llm_thread_done = False
 llm_thread_lock = threading.Lock()
+
+
+def read_info_json():
+    info_json_path = os.path.join(EXTRA_INFORMATION_JSON_DIR, "info.json")
+    with open(info_json_path, "r") as f:
+        info_data = json.load(f)
+    return info_data.get("expectedCompletionTime"), info_data.get(
+        "expectedNumOfActions"
+    )
 
 
 def get_current_timestamp():
@@ -265,10 +270,11 @@ class SubmitButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
-        global submitted, time_sums, start_time, expected_number_of_actions, expected_completion_time, total_time
+        global submitted, time_sums, start_time
 
-        print(expected_number_of_actions)
-        print(expected_completion_time)
+        expectedCompletionTime, expectedNumOfActions = read_info_json()
+        print(expectedCompletionTime)
+        print(expectedNumOfActions)
 
         if submitted:
             reset_viewport()
@@ -463,13 +469,6 @@ class SubmitButton(bpy.types.Operator):
             except Exception as e:
                 print("Failed to register poll timer on submit:", e)
 
-        submission_info = {
-            "questionName": "House_1",
-            "passed": str(True if all_faces_ok else False),
-            "numberOfActions": str(number_of_actions),
-            "timeTaken": str(total_time),
-        }
-
         # Include timing information when the submission passed
         if all_faces_ok:
             # send total time in seconds (as a string for consistency)
@@ -477,6 +476,14 @@ class SubmitButton(bpy.types.Operator):
             # reset accumulated time for a fresh session
             time_sums = 0
             start_time = get_current_timestamp()
+
+        submission_info = {
+            "userId": str(123),
+            "questionName": "House_1",
+            "passed": str(True if all_faces_ok else False),
+            "number_of_actions": str(number_of_actions),
+            "time_taken": str(total_time),
+        }
 
         post_request_data = requests.post(
             "http://localhost:3000/api/submit", json=submission_info
@@ -687,12 +694,10 @@ def unregister_panel():
         bpy.utils.unregister_class(ui_class)
 
 
-def load_model():
-    addon_path = os.path.dirname(__file__)
-    file_path = os.path.join(addon_path, "", "test.fbx")
-
+def load_model(path: str):
+    print(path)
     bpy.ops.object.select_all(action="DESELECT")
-    bpy.ops.wm.fbx_import(filepath=file_path)
+    bpy.ops.wm.fbx_import(filepath=path)
 
     for obj in bpy.context.selected_objects:
         obj.name = IMPORTED_OBJECT_NAME
@@ -744,12 +749,13 @@ app = FastAPI()
 # Paths (relative to addon/)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_INPUT_DIR = os.path.join(BASE_DIR, "json_inputs_test")
-EXTRA_INFORMATION_JSON_DIR = os.path.join(BASE_DIR, "extra_information_json")
 FBX_OUTPUT_DIR = os.path.join(BASE_DIR, "json_output_test")
+EXTRA_INFORMATION_JSON_DIR = os.path.join(BASE_DIR, "extra_information_json")
 CONVERTER_SCRIPT = os.path.join(BASE_DIR, "converters", "json_to_fbx.py")
 
 os.makedirs(JSON_INPUT_DIR, exist_ok=True)
 os.makedirs(FBX_OUTPUT_DIR, exist_ok=True)
+os.makedirs(EXTRA_INFORMATION_JSON_DIR, exist_ok=True)
 
 
 class ConvertRequest(BaseModel):
@@ -760,15 +766,14 @@ class ConvertRequest(BaseModel):
 
 @app.post("/convert")
 def convert_json_to_fbx(payload: ConvertRequest):
-    global expected_completion_time, expected_number_of_actions  # Add this line
     job_id = str(uuid.uuid4())
 
-    json_path = os.path.join(JSON_INPUT_DIR, f"{job_id}.json")
-    fbx_path = os.path.join(FBX_OUTPUT_DIR, f"{job_id}.fbx")
+    json_path = os.path.join(JSON_INPUT_DIR, f"model.json")
+    fbx_path = os.path.join(FBX_OUTPUT_DIR, f"model.fbx")
 
     # Save JSON
     with open(json_path, "w") as f:
-        json.dump(payload.dict()["objects"], f, indent=2)
+        json.dump(payload.dict(), f, indent=2)
 
     other_information_json_path = os.path.join(EXTRA_INFORMATION_JSON_DIR, f"info.json")
     with open(other_information_json_path, "w") as f:
@@ -780,8 +785,6 @@ def convert_json_to_fbx(payload: ConvertRequest):
             f,
             indent=2,
         )
-
-    print(payload)
 
     # Call Blender
     cmd = [
@@ -835,8 +838,26 @@ def _is_port_in_use(host: str, port: int) -> bool:
         return False
 
 
-draw_lengths()
-load_model()
+import time
+
+
+def wait_for_model_fbx():
+    """Wait until model.fbx exists, checking every 0.5 seconds."""
+    fbx_path = os.path.join(FBX_OUTPUT_DIR, "test.fbx")
+    max_wait = 60  # Maximum 60 seconds
+    elapsed = 0
+    print(os.path.exists(fbx_path))
+    while not os.path.exists(fbx_path) and elapsed < max_wait:
+        time.sleep(1.5)
+        elapsed += 1.5
+
+    time.sleep(2)
+    if os.path.exists(fbx_path):
+        load_model(fbx_path)
+    else:
+        print(f"Timeout waiting for model.fbx after {max_wait} seconds")
+
+
 register_panel()
 
 # Start server only if there isn't one already listening on the port
@@ -852,3 +873,6 @@ else:
     print(
         f"Server already running at {_SERVER_HOST}:{_SERVER_PORT}, not starting another."
     )
+
+
+wait_for_model_fbx()

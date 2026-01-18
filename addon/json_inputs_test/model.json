@@ -1,4 +1,6 @@
 {
+  "expectedCompletionTime": 10,
+  "expectedNumOfActions": 20,
   "objects": [
     {
       "name": "Building_Base",
