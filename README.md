@@ -47,7 +47,7 @@ The workflow is simple:
 
 ---
 ## Features
-- Interactive Challenges:
+### Interactive Challenges:
 <p align="center">
   <img src="rm_img/Problems.png" width="800"/>
 </p>
@@ -56,7 +56,7 @@ The workflow is simple:
 - Track attempts and completion status
 - Designed to build intuition, not memorization
 
-- Reference Modeling Loading
+### Reference Modeling Loading
 Each problem loads a **target model** directly into Blender as a wireframe reference.
 <p align="center">
   <img src="rm_img/Loaded_Model.png" width="800"/>
@@ -67,7 +67,7 @@ Each problem loads a **target model** directly into Blender as a wireframe refer
 - No guessing what the final shape should be
 
 
-- Incorrect Submission Detection
+### Incorrect Submission Detection
 When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
 
 <p align="center">
@@ -78,7 +78,7 @@ When the submitted model doesn’t match the target within tolerance, bElite giv
 - Makes debugging geometry intuitive
 - Prevents “looks right but isn’t” mistakes
 
-- Vertex-Level Correctness Feedback
+### Vertex-Level Correctness Feedback
 When parts of your model match the target, faces turn **green**, letting you know exactly what’s correct.
 
 <p align="center">
@@ -90,7 +90,7 @@ When parts of your model match the target, faces turn **green**, letting you kno
 - Learn *where* you’re wrong, not just *that* you’re wrong
 
 
-- AI-Powered Hints (Multimodal)
+### AI-Powered Hints (Multimodal)
 Get contextual hints powered by a **multimodal LLM**.
 <p align="center">
   <img src="rm_img/updated_AI_Hint.png" width="800"/>
@@ -105,8 +105,12 @@ Get contextual hints powered by a **multimodal LLM**.
 
 ---
 
-
 ## How We Built It
+Fully integrated system from frontend → backend → Blender → AI.
+
+<p align="center">
+  <img src="rm_img/Architecture.png" width="900"/>
+</p>
 
 ### Blender Add-on
 - Written entirely in **Python**
@@ -128,7 +132,6 @@ Get contextual hints powered by a **multimodal LLM**.
 
 ### LLM Hints (Local, Multimodal)
 - Uses **LLaVA** via **Ollama**
-- Runs **locally**
 - When a hint is requested:
   - Sends object transforms (position, rotation, scale)
   - Sends modeling action history
