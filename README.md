@@ -57,6 +57,7 @@ The workflow is simple:
 - Designed to build intuition, not memorization
 
 <br>
+
 ### Reference Modeling Loading
 Each problem loads a **target model** directly into Blender as a wireframe reference.
 <p align="center">
@@ -68,6 +69,7 @@ Each problem loads a **target model** directly into Blender as a wireframe refer
 - No guessing what the final shape should be
 
 <br>
+
 ### Incorrect Submission Detection
 When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
 
@@ -78,6 +80,8 @@ When the submitted model doesn’t match the target within tolerance, bElite giv
 - Faces turn **red** when vertices don’t align
 - Makes debugging geometry intuitive
 - Prevents “looks right but isn’t” mistakes
+
+<br>
 
 ### Vertex-Level Correctness Feedback
 When parts of your model match the target, faces turn **green**, letting you know exactly what’s correct.
@@ -91,6 +95,7 @@ When parts of your model match the target, faces turn **green**, letting you kno
 - Learn *where* you’re wrong, not just *that* you’re wrong
 
 <br>
+
 ### AI-Powered Hints (Multimodal)
 Get contextual hints powered by a **multimodal LLM**.
 <p align="center">
