@@ -137,18 +137,13 @@ def get_screenshot_base64():
 
 
 SYSTEM_PROMPT = """
-You are an assistant designed to give hints to a user learning how to 3D model in Blender.
+You are an assistant that helps a user learn how to 3D model in Blender.
 
-You will be given information about where the vertices of the target object are located, where
-the vertices of the object the user is creating are located, and the number of vertices for
-both objects. There will always be two objects.
+You will be asked to either give hints or provide feedback after the user has submitted their model. A problem is a 3D model the user must recreate so its vertices match the target.
 
-You will also be provided with the user's list of actions up to this point, so you can ask them
-to undo if you need to.
+When giving feedback after a submission do NOT describe or refer to the screenshot or say things like "as shown in the image". Instead focus on command efficiency: if the number of actions taken is above the expected maximum, or if there exists a clearly simpler sequence of actions to achieve the same result, explain concisely how they could have used fewer commands. Suggest the minimal Edit Mode tool(s) they should have used and give one concrete first step to start (for example: "Select the top faces, then use Extrude"). If applicable, indicate which recent action(s) they can undo to simplify their workflow. If there is no clear way to reduce commands and the submission is otherwise fine, simply congratulate them.
 
-The most important thing is be concise, and give a very simple hint. DO NOT GIVE ANY MARKDOWN.
-
-Answer in at most 2 sentences.
+Keep feedback concise. DO NOT GIVE ANY MARKDOWN. Answer in at most 2 sentences. Do not say "the user"; speak directly to them.
 """
 
 message_history: list[SystemMessage | HumanMessage | AIMessage] = [
@@ -495,26 +490,28 @@ class SubmitButton(bpy.types.Operator):
         if all_faces_ok:
             # Prepare an LLM prompt summarizing the submission for feedback
             prompt = f"""
-          The user submitted their model for feedback.
+                    The user submitted their model for feedback.
 
-          Here are the number of actions they took to create what is shown in the image: {number_of_actions}
+                    Here are the number of actions they took to create their model: {number_of_actions}
 
-          Here are the exact actions they took to create what is shown in the image: {operators_string}
+                    Here are the exact actions they took: {operators_string}
 
-          This is the expected number of steps, if they are below this then that's even better: {expectedNumOfActions}
+                    This is the expected number of steps (lower is better): {expectedNumOfActions}
 
-          Use the following rules when providing feedback:
-            - Provide it concisely, 3 sentences max.
-            - If the user has already done a good job, has met the number of expected steps or gone below it,
-            and there isn't anything else to call them out on, then you're not required to always provide feedback
-            on things they did wrong. If everything is good, tell them that.
-            - Since all the faces are green you don't have to talk about tolerances, that has already been checked.
-            - Do not suggest modifiers, this Blender addon doesn't take those into account.
-            - Don't overcomplicate the tool usage. If the user used more tools than they were supposed to, tell them
-            the simplest route they could have taken. Remember to look at the image, if the image looks like all the
-            faces could be extruded, then tell the user that. Don't suggest knife tools or more complicated things.
-            - Do not say "the user" in the answer. You are directly talking to them.
-          """
+                    Use the following rules when providing feedback:
+                        - Provide it concisely, 3 sentences max.
+                        - Do NOT describe or refer to the screenshot or say "as shown in the image".
+                        - Focus on command efficiency: if the number of actions is above the expected maximum, or if a clearly
+                        simpler sequence of actions could achieve the same result, explain concisely how they could have used fewer
+                        commands.
+                        - Suggest the minimal Edit Mode tool(s) they should have used (for example: Extrude, Inset, Bevel, Subdivide,
+                        Knife, Loop Cut, Merge by Distance, Vertex/Edge Slide, Fill, Bridge Edge Loops, Proportional Editing) and give
+                        one concrete first step to start (for example: "Select the top faces, then use Extrude").
+                        - If applicable, indicate which recent action(s) they can undo to simplify the workflow.
+                        - If there is no clear way to reduce commands and the submission is otherwise fine, congratulate them instead.
+                        - Do not suggest modifiers; this addon doesn't support them.
+                        - Do not say "the user" in the answer. Speak directly to them.
+                    """
 
             print(prompt)
 
