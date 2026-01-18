@@ -123,7 +123,6 @@
     @apply bg-background text-foreground;
   }
 }
-<<<<<<< HEAD
 
 body {
   background: var(--background);
@@ -155,5 +154,3 @@ body {
     border-color: #374151;
   }
 }
-=======
->>>>>>> 93173e5ec8e610a39900bc6a80401f441a59b4de
