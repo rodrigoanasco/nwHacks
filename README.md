@@ -1,29 +1,18 @@
 # bleet
 **Grind Smarter.**
-
-
+<br>
+![logo](/rm_img/logoupdated.png)
 
 ## Inspiration
+When many people start learning Blender (a free and open-source 3D modeling tool), they often begin with Blender Guru’s donut series.
 
-When many people start learning Blender (a free and open-source 3D modeling tool), they often begin with **Blender Guru’s donut series**. It’s a fantastic introduction, but after finishing it, we realized something frustrating:
+It’s a great introduction, but once it ends, many learners realize something frustrating: they feel like they understand Blender... until they try to model something on their own. Suddenly, even simple objects require another YouTube tutorial, and they’re stuck in tutorial hell. 
 
-We *felt* like we knew Blender… until we tried to model something on our own.
+This experience is surprisingly similar to learning data structures and algorithms: the theory makes sense, but when the co-op interview comes, it all falls apart. 
 
-Suddenly, we were stuck in **tutorial hell** unable to model even a simple object (like a car) without opening YouTube.
+The difference between understanding and mastery is practice. So we asked ourselves—what if learning Blender worked the same way people practice LeetCode? 
 
-That feeling felt *very* familiar.
-
-It’s the same experience people have when learning **data structures and algorithms**:  
-You understand the theory… until the co-op interview. Then—uh oh—there goes your internship.
-
-How do people fix that?  
-The key is **practice**.
-
-So we asked ourselves:
-
-> **What if Blender learning worked the same way?**
-
-That’s how **bElite** was born.
+That question is what led to the creation of bElite.
 
 ---
 
@@ -155,6 +144,4 @@ Fully integrated system from frontend → backend → Blender → AI.
     - Pass/fail status
     - User progress
 
-
-**bElite** is about escaping tutorial hell—and actually learning Blender by doing.
 
