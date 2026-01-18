@@ -1,9 +1,10 @@
 import bpy
 import bpy_extras
 import os
-import gpu
+import json
 import bmesh
 import blf
+from langchain_ollama import ChatOllama
 
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
@@ -128,7 +129,66 @@ class HintButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
-        print(f"presssed: hint")
+        # Get the information on the user object
+        user_object = None
+        target_object = None
+        for obj in bpy.context.visible_objects:
+            if obj.name == IMPORTED_OBJECT_NAME:
+                target_object = obj
+            else:
+                user_object = obj
+
+        if user_object is None or target_object is None:
+            print("NO user object?")
+            return {"FINISHED"}
+
+        user_object_data = {
+            "vertex_count": len(user_object.data.vertices),
+            "vertex_coordinates": [list(v.co) for v in user_object.data.vertices],
+            "location": user_object.location,
+        }
+
+        target_object_data = {
+            "vertex_count": len(target_object.data.vertices),
+            "vertex_coordinates": [list(v.co) for v in target_object.data.vertices],
+            "location": target_object.location,
+        }
+
+        # Get the actions the user has taken up to this point
+        actions = ""
+        for operator in bpy.context.window_manager.operators:
+            actions += operator.bl_idname + "\n"
+
+        prompt = f"""
+        The user is current stuck on create a 3D model. These are the actions they have taken so far:
+
+        {actions}
+
+        Here is some information about the object they are trying to model. Everything is given in (x, y, z) coordinates according to Blender's standards:
+
+        {json.dumps(target_object_data)}
+
+        Here is what the object the user has modeled so far is like:
+
+        {json.dumps(user_object_data)}
+
+        Please provide them with information about how they can continue on. Do not give them the answer.
+        """
+
+        llm = ChatOllama(
+            model="llama3.1",
+            temperature=0,
+        )
+
+        messages = [
+            (
+                "system",
+                "You are a helpful assistant that translates English to French. Translate the user sentence.",
+            ),
+            ("", "I love programming."),
+        ]
+        ai_msg = llm.invoke(messages)
+        print(ai_msg.content)
 
         return {"FINISHED"}
 
@@ -185,6 +245,9 @@ def draw_lengths():
 
     region = bpy.context.region
     view_3d = bpy.context.region_data
+
+    if region == None or view_3d == None:
+        return
 
     b_mesh = bmesh.new()
     b_mesh.from_mesh(object_data)

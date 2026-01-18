@@ -1,4 +1,4 @@
-import bpy
+import bpy #blender api
 import json
 import sys
 import os
