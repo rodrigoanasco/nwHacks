@@ -12,13 +12,9 @@ export async function POST(req: Request) {
   }
 
   const name = body?.name?.trim();
-  const userId = body?.userId?.trim();
 
   if (!name) {
     return NextResponse.json({ error: "Question name is required" }, { status: 400 });
-  }
-  if (!userId) {
-    return NextResponse.json({ error: "userId is required" }, { status: 400 });
   }
 
   // 2) Load from Mongo (pull needed fields)
@@ -43,11 +39,12 @@ export async function POST(req: Request) {
   }
 
   const payload = {
-    userId,
     expectedCompletionTime: doc.expectedCompletionTime ?? null,
     expectedNumOfActions: doc.expectedNumOfActions ?? null,
     objects: Array.isArray(doc.objects) ? doc.objects : [],
   };
+
+  console.log(payload)
 
   // 3) Forward to convert server
   const convertUrl = process.env.CONVERT_API_URL ?? "http://localhost:8000/convert";

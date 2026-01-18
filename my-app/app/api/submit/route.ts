@@ -2,11 +2,22 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/mongodb";
 import { COLLECTIONS } from "@/lib/db/collections";
 import type { UserProgressDoc } from "@/lib/db/types";
+import { getKindeServerSession } from "@kinde-oss/kinde-auth-nextjs/server";
+
 
 export async function POST(req: Request) {
-  const { userId, questionName, passed } = await req.json();
+  const { questionName, passed } = await req.json();
 
   const db = await getDb();
+  // 2) Get userId from Kinde (or default)
+  const { isAuthenticated, getUser } = getKindeServerSession();
+  const authed = await isAuthenticated();
+
+  let userId = "default";
+  if (authed) {
+    const user = await getUser();
+    if (user?.id) userId = user.id;
+  }
   const col = db.collection<UserProgressDoc>(COLLECTIONS.USER_PROGRESS);
 
   // try update existing entry
