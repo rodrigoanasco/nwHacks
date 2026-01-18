@@ -1,7 +1,9 @@
 # bleet
 **Grind Smarter.**
 <br>
-![logo](/rm_img/logoupdated.png)
+<p align=center>
+<img src=rm_img/logoupdated.png/>
+</p>
 
 ## Inspiration
 When many people start learning Blender (a free and open-source 3D modeling tool), they often begin with Blender Guru’s donut series.
