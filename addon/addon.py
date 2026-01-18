@@ -4,6 +4,7 @@ import os
 import json
 import bmesh
 import blf
+import textwrap
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import subprocess
@@ -12,6 +13,15 @@ import json
 import os
 import uvicorn
 import threading
+import langchain
+from langchain.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_ollama import ChatOllama
+from langchain_core.output_parsers import StrOutputParser
+import PIL
+from PIL import Image
+from io import BytesIO
+import base64
+
 
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
@@ -19,6 +29,129 @@ TOLERANCE = 0.1
 hints_remaining = 3
 submitted = False
 bpy.types.Scene.submit_button_text = bpy.props.StringProperty(default="Submit")
+bpy.types.Scene.llm_response = bpy.props.StringProperty(default="")
+bpy.types.Scene.show_llm_in_panel = bpy.props.BoolProperty(default=False)
+# Track whether an LLM response is currently being generated
+bpy.types.Scene.llm_loading = bpy.props.BoolProperty(default=False)
+
+# Globals used to communicate between the worker thread and the main thread
+llm_thread_result = None
+llm_thread_done = False
+llm_thread_lock = threading.Lock()
+
+
+def convert_to_base64(pil_image):
+    """
+    Convert PIL images to Base64 encoded strings
+
+    :param pil_image: PIL image
+    :return: Re-sized Base64 string
+    """
+
+    buffered = BytesIO()
+    pil_image.save(buffered, format="JPEG")  # You can change the format if needed
+    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return img_str
+
+
+def get_screenshot_base64():
+    area = None
+    for current_area in bpy.context.window.screen.areas:
+        if current_area.type == "VIEW_3D":
+            area = current_area
+            break
+
+    if area == None:
+        print("No area??")
+        return ""
+
+    region = None
+    for current_region in area.regions:
+        if current_region.type == "WINDOW":
+            region = current_region
+            break
+
+    if region == None:
+        print("No region??")
+        return ""
+
+    with bpy.context.temp_override(
+        window=bpy.context.window,
+        screen=bpy.context.window.screen,
+        area=area,
+        region=region,
+        space=area.spaces[0],
+    ):
+        # Save screenshot to the addon directory (next to this file)
+        addon_dir = os.path.dirname(__file__) + "\\images"
+        out_path = os.path.join(addon_dir + "\\images", "woah.png")
+        bpy.ops.screen.screenshot_area(filepath=out_path)
+
+        base_64 = convert_to_base64(Image.open(out_path))
+        return base_64
+
+
+SYSTEM_PROMPT = """
+You are an assistant designed to give hints to a user learning how to 3D model in Blender.
+
+You will be given information about where the vertices of the target object are located, where
+the vertices of the object the user is creating are located, and the number of vertices for
+both objects. There will always be two objects.
+
+You will also be provided with the user's list of actions up to this point, so you can ask them
+to undo if you need to.
+
+The most important thing is be concise, and give a very simple hint. DO NOT GIVE ANY MARKDOWN.
+
+Answer in at most 3 sentences.
+"""
+
+message_history: list[SystemMessage | HumanMessage | AIMessage] = [
+    SystemMessage(SYSTEM_PROMPT)
+]
+
+
+def prompt_func(data):
+    text = data["text"]
+    image = data["image"]
+
+    image_part = {
+        "type": "image_url",
+        "image_url": f"data:image/jpeg;base64,{image}",
+    }
+
+    content_parts = []
+
+    text_part = {"type": "text", "text": text}
+
+    content_parts.append(image_part)
+    content_parts.append(text_part)
+
+    return [HumanMessage(content=content_parts)]
+
+
+def send_llm_message(prompt: str, base64_image: str):
+    image_part = {
+        "type": "image_url",
+        "image_url": f"data:image/jpeg;base64,{base64_image}",
+    }
+    text_part = {"type": "text", "text": prompt}
+
+    new_msg = HumanMessage(content=[image_part, text_part])
+    message_history.append(new_msg)
+
+    llm = ChatOllama(
+        model="llava",
+        temperature=0,
+    )
+
+    chain = llm | StrOutputParser()
+
+    output = chain.invoke(message_history)
+    print(output)
+
+    message_history.append(AIMessage(content=output))
+    return str(output)
 
 
 def reset_viewport():
@@ -137,7 +270,6 @@ class SubmitButton(bpy.types.Operator):
             mix = nodes.new(type="ShaderNodeMixShader")
             mix.location = (200, 0)
             mix.inputs["Fac"].default_value = mix_factor
-
             transp = nodes.new(type="ShaderNodeBsdfTransparent")
             transp.location = (0, 100)
             transp.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
@@ -162,7 +294,6 @@ class SubmitButton(bpy.types.Operator):
             material.diffuse_color = color_tuple
             material.use_nodes = True
             node_tree = material.node_tree
-            nodes = node_tree.nodes
             links = node_tree.links
 
             nodes.clear()
@@ -233,6 +364,9 @@ class HintButton(bpy.types.Operator):
     def execute(self, context):
         global hints_remaining
 
+        if hints_remaining == 0:
+            return {"FINISHED"}
+
         # Get the information on the user object
         user_object = None
         target_object = None
@@ -248,14 +382,18 @@ class HintButton(bpy.types.Operator):
 
         user_object_data = {
             "vertex_count": len(user_object.data.vertices),
-            "vertex_coordinates": [list(v.co) for v in user_object.data.vertices],
-            "location": user_object.location,
+            "vertex_coordinates": [
+                f"({v.co.x}, {v.co.y}, {v.co.z})," for v in user_object.data.vertices
+            ],
+            "location": f"({user_object.location.x}, {user_object.location.y}, {user_object.location.z})",
         }
 
         target_object_data = {
             "vertex_count": len(target_object.data.vertices),
-            "vertex_coordinates": [list(v.co) for v in target_object.data.vertices],
-            "location": target_object.location,
+            "vertex_coordinates": [
+                f"({v.co.x}, {v.co.y}, {v.co.z})," for v in target_object.data.vertices
+            ],
+            "location": f"({target_object.location.x}, {target_object.location.y}, {target_object.location.z})",
         }
 
         # Get the actions the user has taken up to this point
@@ -277,10 +415,82 @@ class HintButton(bpy.types.Operator):
         {json.dumps(user_object_data)}
 
         Please provide them with information about how they can continue on. Do not give them the answer.
+
         """
 
-        hints_remaining -= 1
+        # Capture screenshot on the main thread (Blender API must not be called from worker)
+        try:
+            screenshot_b64 = get_screenshot_base64() or ""
+        except Exception as e:
+            print("Screenshot capture failed:", e)
+            screenshot_b64 = ""
 
+        # Prepare scene state and redraw
+        context.scene.llm_response = ""
+        context.scene.llm_loading = True
+        for area in bpy.context.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
+
+        # Worker will only set the module-level result flag under lock
+        def _worker():
+            global llm_thread_result, llm_thread_done
+            try:
+                res = send_llm_message(prompt, screenshot_b64)
+            except Exception as e:
+                print("LLM worker exception:", e)
+                res = ""
+            with llm_thread_lock:
+                llm_thread_result = res
+                llm_thread_done = True
+
+        # Polling timer runs on main thread to pick up result and update UI
+        def _poll_timer():
+            global llm_thread_result, llm_thread_done
+            with llm_thread_lock:
+                if llm_thread_done:
+                    res = llm_thread_result
+                    llm_thread_result = None
+                    llm_thread_done = False
+                    try:
+                        bpy.context.scene.llm_response = res or ""
+                        bpy.context.scene.llm_loading = False
+                        print(f"LLM response stored: {bpy.context.scene.llm_response}")
+                        for area in bpy.context.screen.areas:
+                            if area.type == "VIEW_3D":
+                                area.tag_redraw()
+                    except Exception as e:
+                        print("Error updating scene in timer poll:", e)
+                    return None
+            # Not ready yet, check again shortly
+            return 0.2
+
+        threading.Thread(target=_worker, daemon=True).start()
+        # Register the polling timer once from the main thread
+        try:
+            bpy.app.timers.register(_poll_timer, first_interval=0.1)
+        except Exception as e:
+            print("Failed to register poll timer:", e)
+
+        hints_remaining -= 1
+        return {"FINISHED"}
+
+
+class LLMResponsePopup(bpy.types.Operator):
+    """Toggle showing the LLM response inline in the panel."""
+
+    bl_idname = "wm.view_llm_in_panel"
+    bl_label = "View LLM Response"
+
+    def execute(self, context):
+        try:
+            context.scene.show_llm_in_panel = not context.scene.show_llm_in_panel
+        except Exception:
+            context.scene.show_llm_in_panel = True
+        # Trigger redraw
+        for area in bpy.context.screen.areas:
+            if area.type == "VIEW_3D":
+                area.tag_redraw()
         return {"FINISHED"}
 
 
@@ -297,20 +507,76 @@ class Panel(bpy.types.Panel):
             return
         layout.label(text=f"Hints remaining: {hints_remaining}")
         layout.operator(HintButton.bl_idname, text="Hint")
+
+        # Show loading label while LLM generation is in progress
+        if getattr(context.scene, "llm_loading", False):
+            layout.label(text="Loading...")
+            # continue rendering other UI elements while keeping user informed
+
+        if context.scene.llm_response:
+            layout.label(text="LLM response available")
+            show = getattr(context.scene, "show_llm_in_panel", False)
+            btn_text = "Hide LLM Response" if show else "View LLM Response"
+            layout.operator(LLMResponsePopup.bl_idname, text=btn_text)
+            # If toggled, render wrapped response inline
+            if show:
+                max_chars = 80
+                wrapped_lines = []
+                # Preserve existing paragraphs and wrap each by words
+                for para in context.scene.llm_response.splitlines():
+                    words = para.split()
+                    if not words:
+                        # blank paragraph -> blank line
+                        wrapped_lines.append("")
+                        continue
+                    cur_words = []
+                    cur_len = 0
+                    for w in words:
+                        wlen = len(w)
+                        if cur_len == 0:
+                            # start new line
+                            cur_words = [w]
+                            cur_len = wlen
+                        elif cur_len + 1 + wlen <= max_chars:
+                            # append to current line (add a space)
+                            cur_words.append(w)
+                            cur_len += 1 + wlen
+                        else:
+                            # flush current line and start new one
+                            wrapped_lines.append(" ".join(cur_words))
+                            cur_words = [w]
+                            cur_len = wlen
+                    if cur_words:
+                        wrapped_lines.append(" ".join(cur_words))
+
+                for line in wrapped_lines:
+                    layout.label(text=line)
         layout.operator(
             SubmitButton.bl_idname, text=bpy.context.scene.submit_button_text
         )
 
 
-classes = [Panel, HintButton, SubmitButton]
+classes = [Panel, HintButton, SubmitButton, LLMResponsePopup]
 
 
 def register_panel():
     for ui_class in classes:
         bpy.utils.register_class(ui_class)
-    # Reset submit button text for all scenes so previous runs don't persist "Try Again"
     for sc in bpy.data.scenes:
         sc.submit_button_text = "Submit"
+        # initialize llm_response for existing scenes
+        try:
+            sc.llm_response = ""
+        except Exception:
+            pass
+        try:
+            sc.show_llm_in_panel = False
+        except Exception:
+            pass
+        try:
+            sc.llm_loading = False
+        except Exception:
+            pass
 
 
 def unregister_panel():
@@ -369,12 +635,6 @@ def draw_lengths():
 """
 Server code
 """
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import subprocess
-import uuid
-import json
-import os
 
 app = FastAPI()
 
@@ -441,11 +701,33 @@ def convert_json_to_fbx(payload: ConvertRequest):
 
 def run_server():
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
-    pass
+
+
+def _is_port_in_use(host: str, port: int) -> bool:
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            s.connect((host, port))
+        return True
+    except Exception:
+        return False
 
 
 load_model()
 register_panel()
 
-server_thread = threading.Thread(target=run_server, daemon=True)
-server_thread.start()
+# Start server only if there isn't one already listening on the port
+_SERVER_HOST = "127.0.0.1"
+_SERVER_PORT = 8000
+
+if not _is_port_in_use(_SERVER_HOST, _SERVER_PORT):
+    existing = globals().get("server_thread")
+    if not existing or not getattr(existing, "is_alive", lambda: False)():
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+else:
+    print(
+        f"Server already running at {_SERVER_HOST}:{_SERVER_PORT}, not starting another."
+    )
