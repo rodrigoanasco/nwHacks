@@ -40,7 +40,7 @@ The workflow is simple:
 ## Features
 ### Interactive Challenges:
 <p align="center">
-  <img src="rm_img/Problems.png" width="800"/>
+  <img src="rm_img/Problems.png" width="600"/>
 </p>
 
 - Easy, Medium, and Hard problems
@@ -52,7 +52,7 @@ The workflow is simple:
 ### Reference Modeling Loading
 Each problem loads a **target model** directly into Blender as a wireframe reference.
 <p align="center">
-  <img src="rm_img/Loaded_Model.png" width="800"/>
+  <img src="rm_img/Loaded_Model.png" width="600"/>
 </p>
 
 - Clear spatial reference
@@ -65,7 +65,7 @@ Each problem loads a **target model** directly into Blender as a wireframe refer
 When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
 
 <p align="center">
-  <img src="rm_img/Incorrect_Submitted_Model.png" width="800"/>
+  <img src="rm_img/Incorrect_Submitted_Model.png" width="600"/>
 </p>
 
 - Faces turn **red** when vertices don’t align
@@ -78,7 +78,7 @@ When the submitted model doesn’t match the target within tolerance, bElite giv
 When parts of your model match the target, faces turn **green**, letting you know exactly what’s correct.
 
 <p align="center">
-  <img src="rm_img/Hard_Problem_3D_Model.png" width="800"/>
+  <img src="rm_img/Hard_Problem_3D_Model.png" width="600"/>
 </p>
 
 - Green = correct geometry
@@ -90,7 +90,7 @@ When parts of your model match the target, faces turn **green**, letting you kno
 ### AI-Powered Hints (Multimodal)
 Get contextual hints powered by a **multimodal LLM**.
 <p align="center">
-  <img src="rm_img/updated_AI_Hint.png" width="800"/>
+  <img src="rm_img/updated_AI_Hint.png" width="600"/>
 </p>
 
 - Uses:
