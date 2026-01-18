@@ -4,13 +4,50 @@ import os
 import json
 import bmesh
 import blf
-import requests
 
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
 
 hints_remaining = 3
 submitted = False
+bpy.types.Scene.submit_button_text = bpy.props.StringProperty(default="Submit")
+
+
+def reset_viewport():
+    global submitted
+
+    if not submitted:
+        return
+
+    for obj in bpy.context.visible_objects:
+        if obj.type != "MESH":
+            continue
+        mats = obj.data.materials
+        if any(
+            m and m.name in ("Match_Green", "Match_Red", "Translucent") for m in mats
+        ):
+            mats.clear()
+
+    target_object = None
+    for obj in bpy.context.visible_objects:
+        if obj.name == IMPORTED_OBJECT_NAME:
+            target_object = obj
+            break
+    if target_object is not None:
+        target_object.display_type = "WIRE"
+
+    # Switch 3D View shading back to Solid and redraw
+    for area in bpy.context.screen.areas:
+        if area.type == "VIEW_3D":
+            for space in area.spaces:
+                if space.type == "VIEW_3D":
+                    try:
+                        space.shading.type = "SOLID"
+                    except Exception:
+                        pass
+            area.tag_redraw()
+
+    submitted = False
 
 
 class SubmitButton(bpy.types.Operator):
@@ -26,6 +63,12 @@ class SubmitButton(bpy.types.Operator):
 
     def execute(self, context):
         global submitted
+
+        if submitted:
+            reset_viewport()
+            context.scene.submit_button_text = "Submit"
+            return {"FINISHED"}
+
         imported_object = None
         user_objects = []
 
@@ -145,10 +188,13 @@ class SubmitButton(bpy.types.Operator):
             poly.material_index = 0
 
         mesh = imported_object.data
+        all_faces_ok = True
         for poly in mesh.polygons:
             # Face is green only if all its vertices are matched; otherwise red
             face_ok = all(matched[i] for i in poly.vertices)
             poly.material_index = 0 if face_ok else 1
+            if not face_ok:
+                all_faces_ok = False
         mesh.update()
 
         # Switch 3D View to Material Preview so materials are visible, then redraw
@@ -160,6 +206,8 @@ class SubmitButton(bpy.types.Operator):
                 area.tag_redraw()
 
         submitted = True
+        if not all_faces_ok:
+            context.scene.submit_button_text = "Try Again"
         return {"FINISHED"}
 
 
@@ -228,56 +276,6 @@ class HintButton(bpy.types.Operator):
         return {"FINISHED"}
 
 
-class ResetButton(bpy.types.Operator):
-    """tooltip goes here"""
-
-    bl_idname = "object.reset_operator"
-    bl_label = "Reset"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return context.mode == "OBJECT"
-
-    def execute(self, context):
-        global submitted
-
-        if not submitted:
-            return
-
-        for obj in bpy.context.visible_objects:
-            if obj.type != "MESH":
-                continue
-            mats = obj.data.materials
-            if any(
-                m and m.name in ("Match_Green", "Match_Red", "Translucent")
-                for m in mats
-            ):
-                mats.clear()
-
-        target_object = None
-        for obj in bpy.context.visible_objects:
-            if obj.name == IMPORTED_OBJECT_NAME:
-                target_object = obj
-                break
-        if target_object is not None:
-            target_object.display_type = "WIRE"
-
-        # Switch 3D View shading back to Solid and redraw
-        for area in bpy.context.screen.areas:
-            if area.type == "VIEW_3D":
-                for space in area.spaces:
-                    if space.type == "VIEW_3D":
-                        try:
-                            space.shading.type = "SOLID"
-                        except Exception:
-                            pass
-                area.tag_redraw()
-
-        submitted = False
-        return {"FINISHED"}
-
-
 class Panel(bpy.types.Panel):
     bl_label = "Panel"
     bl_idname = "PT_SimplePanel"
@@ -291,16 +289,20 @@ class Panel(bpy.types.Panel):
             return
         layout.label(text=f"Hints remaining: {hints_remaining}")
         layout.operator(HintButton.bl_idname, text="Hint")
-        layout.operator(SubmitButton.bl_idname, text="Submit")
-        layout.operator(ResetButton.bl_idname, text="Reset")
+        layout.operator(
+            SubmitButton.bl_idname, text=bpy.context.scene.submit_button_text
+        )
 
 
-classes = [Panel, HintButton, SubmitButton, ResetButton]
+classes = [Panel, HintButton, SubmitButton]
 
 
 def register_panel():
     for ui_class in classes:
         bpy.utils.register_class(ui_class)
+    # Reset submit button text for all scenes so previous runs don't persist "Try Again"
+    for sc in bpy.data.scenes:
+        sc.submit_button_text = "Submit"
 
 
 def unregister_panel():
