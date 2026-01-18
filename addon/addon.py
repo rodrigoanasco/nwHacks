@@ -22,6 +22,8 @@ from PIL import Image
 from io import BytesIO
 import base64
 from datetime import datetime, timezone
+import requests
+import logging
 
 
 IMPORTED_OBJECT_NAME = "TARGET"
@@ -113,7 +115,7 @@ to undo if you need to.
 
 The most important thing is be concise, and give a very simple hint. DO NOT GIVE ANY MARKDOWN.
 
-Answer in at most 3 sentences.
+Answer in at most 2 sentences.
 """
 
 message_history: list[SystemMessage | HumanMessage | AIMessage] = [
@@ -267,8 +269,6 @@ class SubmitButton(bpy.types.Operator):
             start_time = get_current_timestamp()
             return {"FINISHED"}
 
-        time_sums += get_current_timestamp() - start_time
-
         imported_object = None
         user_objects = []
 
@@ -404,14 +404,24 @@ class SubmitButton(bpy.types.Operator):
                         space.shading.type = "MATERIAL"
                 area.tag_redraw()
 
+        # Compute elapsed time for this submit attempt
+        elapsed = get_current_timestamp() - start_time
+
+        if all_faces_ok:
+            # Total time is accumulated time plus this final interval
+            total_time = time_sums + elapsed
+        else:
+            # Add elapsed to accumulated time and continue timing
+            time_sums += elapsed
+            # restart interval timing from now
+            start_time = get_current_timestamp()
+
         submitted = True
         if not all_faces_ok:
             context.scene.submit_button_text = "Try Again"
 
-        submission_info = {"passed": True if all_faces_ok else False}
-
+        number_of_actions = bpy.context.window_manager.operators
         if all_faces_ok:
-            number_of_actions = bpy.context.window_manager.operators
             # Prepare an LLM prompt summarizing the submission for feedback
             prompt = f"""
           The user submitted their model for feedback.
@@ -445,6 +455,25 @@ class SubmitButton(bpy.types.Operator):
                 )
             except Exception as e:
                 print("Failed to register poll timer on submit:", e)
+
+        submission_info = {
+            "userId": str(123),
+            "questionName": "House_1",
+            "passed": str(True if all_faces_ok else False),
+            # "number_of_actions": str(number_of_actions),
+        }
+
+        # Include timing information when the submission passed
+        if all_faces_ok:
+            # send total time in seconds (as a string for consistency)
+            submission_info["time_seconds"] = str(total_time)
+            # reset accumulated time for a fresh session
+            time_sums = 0
+            start_time = get_current_timestamp()
+
+        post_request_data = requests.post(
+            "http://localhost:3000/api/submit", json=submission_info
+        )
 
         return {"FINISHED"}
 
