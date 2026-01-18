@@ -424,8 +424,8 @@ class SubmitButton(bpy.types.Operator):
 
             links.new(principled.outputs["BSDF"], output.inputs["Surface"])
 
-        set_principled_material_color(green, (0.0, 1.0, 0.0, 1.0))
-        set_principled_material_color(red, (1.0, 0.0, 0.0, 1.0))
+        set_translucent_material_color(green, (0.0, 1.0, 0.0, 1.0), 1)
+        set_translucent_material_color(red, (1.0, 0.0, 0.0, 1.0), 0.3)
         set_translucent_material_color(translucent, (1.0, 1.0, 1.0, 1.0))
 
         # Ensure two material slots on the imported mesh: 0 = green, 1 = red
@@ -632,20 +632,24 @@ class HintButton(bpy.types.Operator):
 
         Please provide them with information about how they can continue on. Do not give them the answer.
 
+        Important: when giving hints assume the user is in Blender's Edit Mode. Available Edit Mode tools you may
+        reference are: Extrude, Inset, Bevel, Subdivide, Knife, and Loop Cut.
+
         Use the following rules when providing a hint:
             - Provide it concisely, 3 sentences max.
-            - If the user has overcomplicated the actions or taken to many (above the expected) then let them know
-            so they can backtrack.
+            - Directly suggest the simplest Edit Mode tool(s) from the list above that the user should use
+            and the single, explicit first step they should take (for example: "Select the top faces, then use Extrude");
+            this first step should include what to select and which operation to perform.
+            - If the user has overcomplicated the actions or taken too many (above the expected) then let them know
+            so they can backtrack to a simpler route.
             - Do not suggest modifiers, this Blender addon doesn't take those into account.
-            - Don't overcomplicate the tool usage. If the user used more tools than they were supposed to, tell them
-            the simplest route they could possibly take. Remember to look at the image, if the image looks like all the
-            faces could be extruded, then hint at that when telling the user.
+            - Don't overcomplicate tool usage. If the image suggests faces could be handled by extrusion, recommend
+            that rather than knife or other complex operations.
             - Do not say "the user" in the answer. You are directly talking to them.
-            - If the vertices are equal, then try comparing the positions of the objects. Is the scale, position, or rotation wrong?
-            Use this, if applicable, in the hint as well.
+            - If the vertices are equal, compare scale/position/rotation and mention it if applicable.
             - If in the screenshot there are red and green faces then here's what it means. Red faces means the vertices haven't
             met the tolerance of {TOLERANCE}. Green faces means they have met the tolerance. If the tolerance is off then it may be
-            because the face is in the wrong position, rotation, or scale. Again, if applicable, try using this in the hint.
+            because the face is in the wrong position, rotation, or scale. Use this if applicable.
             - If the number of vertices between the objects is equal then don't suggest adding more through tools that do (e.g extrude,
             knife, etc). Instead, they have to modify the object somehow.
             - Don't ask about providing further assistance. You're just providing hints.
@@ -801,7 +805,7 @@ class Panel(bpy.types.Panel):
     bl_idname = "PT_SimplePanel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "NAME OF TOOL"
+    bl_category = "Bleet"
 
     def draw(self, context):
         layout = self.layout
@@ -851,8 +855,9 @@ class Panel(bpy.types.Panel):
                     if cur_words:
                         wrapped_lines.append(" ".join(cur_words))
 
-                for line in wrapped_lines:
-                    layout.label(text=line)
+                if wrapped_lines:
+                    for line in wrapped_lines:
+                        layout.label(text=line)
                 else:
                     layout.label(text="No response yet")
 
@@ -1001,14 +1006,9 @@ def load_model(path: str):
 
     # Name the imported objects and set display
     for obj in bpy.context.selected_objects:
-        try:
-            obj.name = IMPORTED_OBJECT_NAME
-        except Exception:
-            pass
-        try:
-            obj.display_type = "WIRE"
-        except Exception:
-            pass
+        obj.name = IMPORTED_OBJECT_NAME
+        obj.display_type = "WIRE"
+        obj.hide_select = True
 
 
 def draw_lengths():

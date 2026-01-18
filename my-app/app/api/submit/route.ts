@@ -10,6 +10,9 @@ export async function POST(req: Request) {
   if (passed === "True") passed = true
   else if (passed === "False") passed = false;
 
+  console.log(questionName);
+  console.log(passed);
+
   const db = await getDb();
   const userId = "default";
   const col = db.collection<UserProgressDoc>(COLLECTIONS.USER_PROGRESS);
