@@ -1,6 +1,6 @@
 # bleet
 **Grind Smarter.**
-![Logo](rm_img/bleet_logo.png)
+
 
 
 ## Inspiration
@@ -56,6 +56,7 @@ The workflow is simple:
 - Track attempts and completion status
 - Designed to build intuition, not memorization
 
+<br>
 ### Reference Modeling Loading
 Each problem loads a **target model** directly into Blender as a wireframe reference.
 <p align="center">
@@ -66,7 +67,7 @@ Each problem loads a **target model** directly into Blender as a wireframe refer
 - Encourages correct proportions and topology
 - No guessing what the final shape should be
 
-
+<br>
 ### Incorrect Submission Detection
 When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
 
@@ -89,7 +90,7 @@ When parts of your model match the target, faces turn **green**, letting you kno
 - Red = incorrect geometry
 - Learn *where* you’re wrong, not just *that* you’re wrong
 
-
+<br>
 ### AI-Powered Hints (Multimodal)
 Get contextual hints powered by a **multimodal LLM**.
 <p align="center">
@@ -128,7 +129,6 @@ Fully integrated system from frontend → backend → Blender → AI.
 - Accepts JSON describing a target object
 - Converts that JSON into an **FBX file** that Blender can load
 
-> This server runs on a separate thread **inside Blender** so it can safely call Blender functions like `load_model`.
 
 ### LLM Hints (Local, Multimodal)
 - Uses **LLaVA** via **Ollama**
