@@ -21,10 +21,13 @@ import PIL
 from PIL import Image
 from io import BytesIO
 import base64
+from datetime import datetime, timezone
 
 
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
+
+time_sums = 0
 
 hints_remaining = 3
 submitted = False
@@ -38,6 +41,13 @@ bpy.types.Scene.llm_loading = bpy.props.BoolProperty(default=False)
 llm_thread_result = None
 llm_thread_done = False
 llm_thread_lock = threading.Lock()
+
+
+def get_current_timestamp():
+    return datetime.now(timezone.utc).replace(tzinfo=timezone.utc).timestamp()
+
+
+start_time = get_current_timestamp()
 
 
 def convert_to_base64(pil_image):
@@ -154,6 +164,52 @@ def send_llm_message(prompt: str, base64_image: str):
     return str(output)
 
 
+class LLMResponseThread:
+    llm_thread_result = None
+    llm_thread_done = False
+    llm_thread_lock = threading.Lock()
+
+    prompt = ""
+    screenshot_b64 = ""
+
+    def __init__(self, prompt: str, screenshot_b64: str) -> None:
+        self.prompt = prompt
+        self.screenshot_b64 = screenshot_b64
+
+    # Worker will only set the module-level result flag under lock
+    def _worker(self):
+        global llm_thread_result, llm_thread_done
+        try:
+            res = send_llm_message(self.prompt, self.screenshot_b64)
+        except Exception as e:
+            print("LLM worker exception:", e)
+            res = ""
+        with llm_thread_lock:
+            llm_thread_result = res
+            llm_thread_done = True
+
+    # Keep checking if the response is ready
+    def _poll_timer(self):
+        global llm_thread_result, llm_thread_done
+        with llm_thread_lock:
+            if llm_thread_done:
+                res = llm_thread_result
+                llm_thread_result = None
+                llm_thread_done = False
+                try:
+                    bpy.context.scene.llm_response = res or ""
+                    bpy.context.scene.llm_loading = False
+                    print(f"LLM response stored: {bpy.context.scene.llm_response}")
+                    for area in bpy.context.screen.areas:
+                        if area.type == "VIEW_3D":
+                            area.tag_redraw()
+                except Exception as e:
+                    print("Error updating scene in timer poll:", e)
+                return None
+        # Not ready yet, check again shortly
+        return 0.2
+
+
 def reset_viewport():
     global submitted
 
@@ -203,12 +259,15 @@ class SubmitButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
-        global submitted
+        global submitted, time_sums, start_time
 
         if submitted:
             reset_viewport()
             context.scene.submit_button_text = "Submit"
+            start_time = get_current_timestamp()
             return {"FINISHED"}
+
+        time_sums += get_current_timestamp() - start_time
 
         imported_object = None
         user_objects = []
@@ -294,6 +353,7 @@ class SubmitButton(bpy.types.Operator):
             material.diffuse_color = color_tuple
             material.use_nodes = True
             node_tree = material.node_tree
+            nodes = node_tree.nodes
             links = node_tree.links
 
             nodes.clear()
@@ -347,6 +407,45 @@ class SubmitButton(bpy.types.Operator):
         submitted = True
         if not all_faces_ok:
             context.scene.submit_button_text = "Try Again"
+
+        submission_info = {"passed": True if all_faces_ok else False}
+
+        if all_faces_ok:
+            number_of_actions = bpy.context.window_manager.operators
+            # Prepare an LLM prompt summarizing the submission for feedback
+            prompt = f"""
+          The user submitted their model for feedback.
+
+          Here are the number of actions they took to create what is shown in the image: {number_of_actions}
+
+          Please provide concise feedback (at most 2 sentences) about how the user can streamline the workflow for
+          creating the model.
+          """
+
+            # Capture screenshot on the main thread (Blender API must not be called from worker)
+            try:
+                screenshot_b64 = get_screenshot_base64() or ""
+            except Exception as e:
+                print("Screenshot capture failed on submit:", e)
+                screenshot_b64 = ""
+
+            # Prepare scene state and redraw so the UI shows loading
+            context.scene.llm_response = ""
+            context.scene.llm_loading = True
+            for area in bpy.context.screen.areas:
+                if area.type == "VIEW_3D":
+                    area.tag_redraw()
+
+            # Start the LLM worker thread and register the poll timer
+            llmResponseThread = LLMResponseThread(prompt, screenshot_b64)
+            threading.Thread(target=llmResponseThread._worker, daemon=True).start()
+            try:
+                bpy.app.timers.register(
+                    llmResponseThread._poll_timer, first_interval=0.1
+                )
+            except Exception as e:
+                print("Failed to register poll timer on submit:", e)
+
         return {"FINISHED"}
 
 
@@ -432,43 +531,11 @@ class HintButton(bpy.types.Operator):
             if area.type == "VIEW_3D":
                 area.tag_redraw()
 
-        # Worker will only set the module-level result flag under lock
-        def _worker():
-            global llm_thread_result, llm_thread_done
-            try:
-                res = send_llm_message(prompt, screenshot_b64)
-            except Exception as e:
-                print("LLM worker exception:", e)
-                res = ""
-            with llm_thread_lock:
-                llm_thread_result = res
-                llm_thread_done = True
-
-        # Polling timer runs on main thread to pick up result and update UI
-        def _poll_timer():
-            global llm_thread_result, llm_thread_done
-            with llm_thread_lock:
-                if llm_thread_done:
-                    res = llm_thread_result
-                    llm_thread_result = None
-                    llm_thread_done = False
-                    try:
-                        bpy.context.scene.llm_response = res or ""
-                        bpy.context.scene.llm_loading = False
-                        print(f"LLM response stored: {bpy.context.scene.llm_response}")
-                        for area in bpy.context.screen.areas:
-                            if area.type == "VIEW_3D":
-                                area.tag_redraw()
-                    except Exception as e:
-                        print("Error updating scene in timer poll:", e)
-                    return None
-            # Not ready yet, check again shortly
-            return 0.2
-
-        threading.Thread(target=_worker, daemon=True).start()
+        llmResponseThread = LLMResponseThread(prompt, screenshot_b64)
+        threading.Thread(target=llmResponseThread._worker, daemon=True).start()
         # Register the polling timer once from the main thread
         try:
-            bpy.app.timers.register(_poll_timer, first_interval=0.1)
+            bpy.app.timers.register(llmResponseThread._poll_timer, first_interval=0.1)
         except Exception as e:
             print("Failed to register poll timer:", e)
 
