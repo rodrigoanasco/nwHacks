@@ -10,6 +10,7 @@ IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
 
 hints_remaining = 3
+submitted = False
 
 
 class SubmitButton(bpy.types.Operator):
@@ -24,6 +25,7 @@ class SubmitButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
+        global submitted
         imported_object = None
         user_objects = []
 
@@ -61,14 +63,19 @@ class SubmitButton(bpy.types.Operator):
             "Match_Green"
         )
         red = bpy.data.materials.get("Match_Red") or bpy.data.materials.new("Match_Red")
+        translucent = bpy.data.materials.get("Translucent") or bpy.data.materials.new(
+            "Translucent"
+        )
 
         # Create the material based on a shader graph
-        def set_mat_color(mat, color_tuple, mix_factor=0.407, roughness=0.613):
-            mat.diffuse_color = color_tuple
-            mat.use_nodes = True
-            nt = mat.node_tree
-            nodes = nt.nodes
-            links = nt.links
+        def set_translucent_material_color(
+            material, color_tuple, mix_factor=0.407, roughness=0.613
+        ):
+            material.diffuse_color = color_tuple
+            material.use_nodes = True
+            node_tree = material.node_tree
+            nodes = node_tree.nodes
+            links = node_tree.links
 
             nodes.clear()
 
@@ -93,29 +100,66 @@ class SubmitButton(bpy.types.Operator):
             links.new(glossy.outputs["BSDF"], mix.inputs[2])
             links.new(mix.outputs["Shader"], output.inputs["Surface"])
 
-            # For Eevee transparency in the viewport
+            # Ensure Eevee viewport transparency works and shadows are disabled
             try:
-                mat.blend_method = "BLEND"
-                mat.shadow_method = "NONE"
+                material.blend_method = "BLEND"
+                material.shadow_method = "NONE"
             except Exception:
                 pass
 
-        set_mat_color(green, (0.0, 1.0, 0.0, 1.0))
-        set_mat_color(red, (1.0, 0.0, 0.0, 1.0))
+        def set_principled_material_color(material, color_tuple):
+            material.diffuse_color = color_tuple
+            material.use_nodes = True
+            node_tree = material.node_tree
+            nodes = node_tree.nodes
+            links = node_tree.links
+
+            nodes.clear()
+
+            output = nodes.new(type="ShaderNodeOutputMaterial")
+            output.location = (400, 0)
+
+            principled = nodes.new(type="ShaderNodeBsdfPrincipled")
+            principled.location = (0, 0)
+            # Principled BSDF uses 'Base Color'
+            principled.inputs["Base Color"].default_value = color_tuple
+
+            links.new(principled.outputs["BSDF"], output.inputs["Surface"])
+
+        set_principled_material_color(green, (0.0, 1.0, 0.0, 1.0))
+        set_principled_material_color(red, (1.0, 0.0, 0.0, 1.0))
+        set_translucent_material_color(translucent, (1.0, 1.0, 1.0, 1.0))
 
         # Ensure two material slots on the imported mesh: 0 = green, 1 = red
-        mats = imported_object.data.materials
-        mats.clear()
-        mats.append(green)
-        mats.append(red)
+        imported_objects_mats = imported_object.data.materials
+        imported_objects_mats.clear()
+        imported_objects_mats.append(green)
+        imported_objects_mats.append(red)
+
+        user_object_mats = user_objects[0].data.materials
+        user_object_mats.clear()
+        user_object_mats.append(translucent)
+
+        mesh = user_objects[0].data
+        for poly in mesh.polygons:
+            poly.material_index = 0
 
         mesh = imported_object.data
         for poly in mesh.polygons:
             # Face is green only if all its vertices are matched; otherwise red
             face_ok = all(matched[i] for i in poly.vertices)
             poly.material_index = 0 if face_ok else 1
-
         mesh.update()
+
+        # Switch 3D View to Material Preview so materials are visible, then redraw
+        for area in bpy.context.screen.areas:
+            if area.type == "VIEW_3D":
+                for space in area.spaces:
+                    if space.type == "VIEW_3D":
+                        space.shading.type = "MATERIAL"
+                area.tag_redraw()
+
+        submitted = True
         return {"FINISHED"}
 
 
@@ -179,23 +223,58 @@ class HintButton(bpy.types.Operator):
         Please provide them with information about how they can continue on. Do not give them the answer.
         """
 
-        # llm = ChatOllama(
-        #     model="llama3.1",
-        #     temperature=0,
-        # )
-
-        # messages = [
-        #     (
-        #         "system",
-        #         "You are a helpful assistant that translates English to French. Translate the user sentence.",
-        #     ),
-        #     ("", "I love programming."),
-        # ]
-        # ai_msg = llm.invoke(messages)
-        # print(ai_msg.content)
-
         hints_remaining -= 1
 
+        return {"FINISHED"}
+
+
+class ResetButton(bpy.types.Operator):
+    """tooltip goes here"""
+
+    bl_idname = "object.reset_operator"
+    bl_label = "Reset"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == "OBJECT"
+
+    def execute(self, context):
+        global submitted
+
+        if not submitted:
+            return
+
+        for obj in bpy.context.visible_objects:
+            if obj.type != "MESH":
+                continue
+            mats = obj.data.materials
+            if any(
+                m and m.name in ("Match_Green", "Match_Red", "Translucent")
+                for m in mats
+            ):
+                mats.clear()
+
+        target_object = None
+        for obj in bpy.context.visible_objects:
+            if obj.name == IMPORTED_OBJECT_NAME:
+                target_object = obj
+                break
+        if target_object is not None:
+            target_object.display_type = "WIRE"
+
+        # Switch 3D View shading back to Solid and redraw
+        for area in bpy.context.screen.areas:
+            if area.type == "VIEW_3D":
+                for space in area.spaces:
+                    if space.type == "VIEW_3D":
+                        try:
+                            space.shading.type = "SOLID"
+                        except Exception:
+                            pass
+                area.tag_redraw()
+
+        submitted = False
         return {"FINISHED"}
 
 
@@ -213,9 +292,10 @@ class Panel(bpy.types.Panel):
         layout.label(text=f"Hints remaining: {hints_remaining}")
         layout.operator(HintButton.bl_idname, text="Hint")
         layout.operator(SubmitButton.bl_idname, text="Submit")
+        layout.operator(ResetButton.bl_idname, text="Reset")
 
 
-classes = [Panel, HintButton, SubmitButton]
+classes = [Panel, HintButton, SubmitButton, ResetButton]
 
 
 def register_panel():
