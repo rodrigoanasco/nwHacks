@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
@@ -12,11 +13,12 @@ export default function CurrentQuestion() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (typeof window !== undefined) {
+    if (typeof window !== "undefined") {
       const currentMount = containerRef.current;
+      if (!currentMount) return;
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(
-        75,
+        100,
         window.innerWidth / window.innerHeight,
         0.1,
         1000,
@@ -35,54 +37,104 @@ export default function CurrentQuestion() {
       scene.add(directionalLightTwo);
 
       const loader = new GLTFLoader();
+      let model: THREE.Object3D | null = null;
 
       loader.load(
-        // resource URL
-        "/easy.glb",
-        // called when the resource is loaded
+        `/${currentQuestionName}.glb`,
         function (gltf) {
-          scene.add(gltf.scene);
-          // Optional: You can access animations, cameras, etc. here
-          // const animations = gltf.animations;
-          // const cameras = gltf.cameras;
+          model = gltf.scene;
+          scene.add(model);
         },
-        // called while loading is progressing (optional)
         function (xhr) {
-          console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
+          // progress (optional)
+          // console.log((xhr.loaded / (xhr.total || 1)) * 100 + "% loaded");
         },
-        // called when loading has errors (optional)
         function (error) {
           console.error("An error happened", error);
         },
       );
 
       camera.position.z = 5;
+      let frameId = 0;
       const animate = () => {
-        requestAnimationFrame(animate);
-        // Optional: add some rotation
-        console.log(scene.children);
-
-        if (scene.children.length > 3) scene.children[3].rotation.y += 0.005;
+        frameId = requestAnimationFrame(animate);
+        if (model) model.rotation.y += 0.005;
         renderer.render(scene, camera);
       };
-      animate();
+      frameId = requestAnimationFrame(animate);
 
       // Render the scene and camera
       renderer.render(scene, camera);
 
       return () => {
-        currentMount.removeChild(renderer.domElement);
+        // stop animation
+        if (frameId) cancelAnimationFrame(frameId);
+
+        // remove model and dispose geometries/materials
+        if (model) {
+          scene.remove(model);
+          model.traverse((child: any) => {
+            if (child.geometry) {
+              child.geometry.dispose();
+            }
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((m: any) => {
+                  if (m.map) m.map.dispose();
+                  m.dispose();
+                });
+              } else {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+              }
+            }
+          });
+        }
+
+        // remove renderer DOM and dispose renderer/context
+        try {
+          if (
+            renderer.domElement &&
+            currentMount.contains(renderer.domElement)
+          ) {
+            currentMount.removeChild(renderer.domElement);
+          }
+        } catch (e) {
+          // ignore
+        }
+        try {
+          renderer.dispose();
+          // @ts-ignore
+          if (renderer.forceContextLoss) renderer.forceContextLoss();
+        } catch (e) {
+          // ignore
+        }
       };
     }
-  }, []);
+  }, [currentQuestionName]);
 
   const [loadingInBlender, setLoadingInBlender] = useState<boolean>(false);
-  const loadInBlenderCallback = () => {};
+  const loadInBlenderCallback = async () => {
+    setLoadingInBlender(true);
+    const apiRequestBody = {
+      name: currentQuestionName,
+      userId: "default",
+    };
+    await fetch("/api/question", {
+      method: "POST", // Specify the method
+      headers: {
+        "Content-Type": "application/json", // Indicate the content type
+      },
+      body: JSON.stringify(apiRequestBody),
+    });
+    toast.success("3D model has been loaded, open up blender please.");
+    setLoadingInBlender(false);
+  };
 
   return (
     <div className="flex flex-col max-w-min mx-auto justify-center h-screen items-center gap-4">
       <div ref={containerRef}></div>
-      <Button className="w-full" onClick={}>
+      <Button className="w-full" onClick={loadInBlenderCallback}>
         {!loadingInBlender ? "Load in Blender" : "Loading..."}
       </Button>
     </div>

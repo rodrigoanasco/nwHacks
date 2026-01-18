@@ -47,7 +47,7 @@ function initials(name: string) {
 }
 
 export default function DashboardClient() {
-  const [rows, _] = useState<ProblemRow[]>([]);
+  const [rows, setRows] = useState<ProblemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,17 +71,24 @@ export default function DashboardClient() {
         const pJson: { userId: string; questions: ProgressQuestion[] } =
           await pRes.json();
 
-        for (let i = 0; i < qJson.questionBank.length; ++i) {
-          const newRow: ProblemRow = {
-            name: qJson.questionBank[i].name,
-            difficulty: qJson.questionBank[i].difficulty,
-            completed: pJson.questions[i].passed ? "completed" : "incomplete",
-            attemps: pJson.questions[i].attempts,
+        // Build rows from responses (do not mutate state directly)
+        const newRows: ProblemRow[] = qJson.questionBank.map((q) => {
+          const prog = pJson.questions.find((pq) => pq.name === q.name);
+          const attempts = prog ? prog.attempts : 0;
+          let completed: ProblemRow["completed"] =
+            prog && prog.passed ? "completed" : "incomplete";
+          if (prog && !prog.passed && prog.attempts > 0)
+            completed = "in_progress";
+
+          return {
+            name: q.name,
+            difficulty: q.difficulty,
+            completed,
+            attemps: attempts,
           };
-          if (!pJson.questions[i].passed && pJson.questions[i].attempts > 0)
-            newRow.completed = "in_progress";
-          rows.push(newRow);
-        }
+        });
+
+        setRows(newRows);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load dashboard data");
       } finally {
@@ -132,17 +139,10 @@ export default function DashboardClient() {
               </TableHeader>
 
               <TableBody>
-                {rows.map((problem) => (
-                  <TableRow key={problem.name}>
+                {rows.map((problem, index) => (
+                  <TableRow key={`${problem.name}-${index}`}>
                     <TableCell className="font-medium">
-                      {/* <Button
-                        variant={"link"}
-                        onClick={() => {
-                          buttonCallback(problem.name);
-                        }}
-                      > */}
                       <Link href={`/${problem.name}`}>{problem.name}</Link>
-                      {/* </Button> */}
                     </TableCell>
 
                     <TableCell>
