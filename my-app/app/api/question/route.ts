@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/mongodb";
+import { COLLECTIONS } from "@/lib/db/collections";
 
 export async function POST(req: Request) {
   // 1) Read body
@@ -11,17 +12,23 @@ export async function POST(req: Request) {
   }
 
   const name = body?.name?.trim();
+
   if (!name) {
-    return NextResponse.json({ error: "name is required" }, { status: 400 });
+    return NextResponse.json({ error: "Question name is required" }, { status: 400 });
   }
 
-  // 2) Load from Mongo
+  // 2) Load from Mongo (pull needed fields)
   const db = await getDb();
-
-  const collectionName = process.env.MONGODB_COLLECTION ?? "test";
-  const doc = await db.collection(collectionName).findOne(
+  const doc = await db.collection(COLLECTIONS.QUESTIONS).findOne(
     { name },
-    { projection: { _id: 0, objects: 1 } }
+    {
+      projection: {
+        _id: 0,
+        objects: 1,
+        expectedCompletionTime: 1,
+        expectedNumOfActions: 1,
+      },
+    }
   );
 
   if (!doc) {
@@ -31,18 +38,32 @@ export async function POST(req: Request) {
     );
   }
 
-  const payload = { objects: Array.isArray(doc.objects) ? doc.objects : [] };
+  const payload = {
+    questionName: name,
+    expectedCompletionTime: doc.expectedCompletionTime ?? null,
+    expectedNumOfActions: doc.expectedNumOfActions ?? null,
+    objects: Array.isArray(doc.objects) ? doc.objects : [],
+  };
+
+  console.log(payload)
 
   // 3) Forward to convert server
   const convertUrl = process.env.CONVERT_API_URL ?? "http://localhost:8000/convert";
 
-  let upstreamRes: Response;
   try {
-    upstreamRes = await fetch(convertUrl, {
+    const upstreamRes = await fetch(convertUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+
+    if (!upstreamRes.ok) {
+      const text = await upstreamRes.text().catch(() => "");
+      return NextResponse.json(
+        { error: "Convert server returned error", status: upstreamRes.status, detail: text },
+        { status: 502 }
+      );
+    }
   } catch (e: any) {
     return NextResponse.json(
       { error: "Failed to reach convert server", detail: String(e?.message ?? e) },
@@ -50,19 +71,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // 4) Pass through response (best effort)
-  const contentType = upstreamRes.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    const data = await upstreamRes.json().catch(() => null);
-    return NextResponse.json(data ?? { error: "Convert server returned invalid JSON" }, {
-      status: upstreamRes.status,
-    });
-  } else {
-    const text = await upstreamRes.text().catch(() => "");
-    return new NextResponse(text, {
-      status: upstreamRes.status,
-      headers: { "content-type": contentType || "text/plain" },
-    });
-  }
+  // 4) Minimal response
+  return new NextResponse(null, { status: 204 });
 }

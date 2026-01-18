@@ -1,28 +1,47 @@
 import { NextResponse } from "next/server";
+import { getDb } from "@/lib/db/mongodb";
+import { COLLECTIONS } from "@/lib/db/collections";
+import type { UserProgressDoc } from "@/lib/db/types";
 
-type question = {
-    id: number
-    answer: string
-}
 
 export async function POST(req: Request) {
-    const body = (await req.json()) as question;
+  let { questionName, passed, numberOfActions, timeTaken, score } = await req.json();
 
-    if(!body.answer || body.answer.trim().length == 0){
-        return NextResponse.json(
-            {error: "Answer is required"},
-            {status: 400}
-        );
-    }
-    if(!body.id){
-        return NextResponse.json(
-            {error: "Id not sent"},
-            {status: 400}
-        );
-    }
+  if (passed === "True") passed = true
+  else if (passed === "False") passed = false;
 
-    if(body.id == 123){
-        const accepted = "Great job you submitted!"
-        return NextResponse.json({ accepted });
+  const db = await getDb();
+  const userId = "default";
+  const col = db.collection<UserProgressDoc>(COLLECTIONS.USER_PROGRESS);
+
+  // try update existing entry
+  const res1 = await col.updateOne(
+    { userId, "questions.name": questionName },
+    {
+      $inc: { "questions.$.attempts": 1 },
+      ...(passed ? { $set: { "questions.$.passed": true } } : {}),
     }
+  );
+
+  if (res1.matchedCount === 0) {
+
+    // push new entry (upsert user doc)
+    await col.updateOne(
+      { userId },
+      {
+        $setOnInsert: { userId },
+        $push: {
+          questions: { name: questionName, attempts: 1, passed },
+        },
+      },
+      { upsert: true }
+    );
+  }
+
+  const updated = await col.findOne(
+    { userId },
+    { projection: { _id: 0, userId: 1, questions: 1 } }
+  );
+
+  return NextResponse.json({ ok: true, progress: updated });
 }
