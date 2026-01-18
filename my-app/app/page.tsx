@@ -47,5 +47,5 @@ export default async function DashboardPage() {
 
   // now you have progressDoc available
 
-  return <DashboardClient userName={userName} />;
+  return <DashboardClient />;
 }

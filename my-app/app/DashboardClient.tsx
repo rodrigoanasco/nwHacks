@@ -35,7 +35,7 @@ type ProgressQuestion = {
 type ProblemRow = {
   name: string;
   difficulty: string;
-  completed: boolean;
+  completed: "completed" | "in_progress" | "incomplete";
   attemps: number;
 };
 
@@ -46,8 +46,8 @@ function initials(name: string) {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function DashboardClient({ userName }: { userName: string }) {
-  const [rows, setRows] = useState<ProblemRow[]>([]);
+export default function DashboardClient() {
+  const [rows, _] = useState<ProblemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,16 +71,15 @@ export default function DashboardClient({ userName }: { userName: string }) {
         const pJson: { userId: string; questions: ProgressQuestion[] } =
           await pRes.json();
 
-        console.log(qJson);
-        console.log(pJson);
-
         for (let i = 0; i < qJson.questionBank.length; ++i) {
           const newRow: ProblemRow = {
             name: qJson.questionBank[i].name,
             difficulty: qJson.questionBank[i].difficulty,
-            completed: pJson.questions[i].passed,
+            completed: pJson.questions[i].passed ? "completed" : "incomplete",
             attemps: pJson.questions[i].attempts,
           };
+          if (!pJson.questions[i].passed && pJson.questions[i].attempts > 0)
+            newRow.completed = "in_progress";
           rows.push(newRow);
         }
       } catch (e: any) {
@@ -136,14 +135,14 @@ export default function DashboardClient({ userName }: { userName: string }) {
                 {rows.map((problem) => (
                   <TableRow key={problem.name}>
                     <TableCell className="font-medium">
-                      <Button
+                      {/* <Button
                         variant={"link"}
                         onClick={() => {
                           buttonCallback(problem.name);
                         }}
-                      >
-                        {problem.name}
-                      </Button>
+                      > */}
+                      <Link href={`/${problem.name}`}>{problem.name}</Link>
+                      {/* </Button> */}
                     </TableCell>
 
                     <TableCell>
@@ -166,13 +165,19 @@ export default function DashboardClient({ userName }: { userName: string }) {
                     <TableCell>{problem.attemps}</TableCell>
 
                     <TableCell>
-                      {problem.completed ? (
+                      {problem.completed === "completed" && (
                         <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
                           ✓ Completed
                         </span>
-                      ) : (
+                      )}
+                      {problem.completed === "incomplete" && (
                         <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200">
                           Incomplete
+                        </span>
+                      )}
+                      {problem.completed === "in_progress" && (
+                        <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-gray-100 text-yellow-800 dark:bg-yellow-700 dark:text-gray-200">
+                          In Progress
                         </span>
                       )}
                     </TableCell>
