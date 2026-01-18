@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Code Snippet Styling */
+.code-snippet-container {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 16px 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.code-snippet-title {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  border-bottom: 1px solid #667eea;
+}
+
+@media (prefers-color-scheme: dark) {
+  .code-snippet-container {
+    border-color: #374151;
+  }
+}
