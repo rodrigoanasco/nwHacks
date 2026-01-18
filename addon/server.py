@@ -31,7 +31,7 @@ def convert_json_to_fbx(payload: ConvertRequest):
     # Save JSON
     with open(json_path, "w") as f:
         json.dump(payload.dict(), f, indent=2)
-
+    print(payload.dict())
     # Call Blender
     cmd = [
         "blender",
