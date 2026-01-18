@@ -1013,5 +1013,7 @@ else:
         f"Server already running at {_SERVER_HOST}:{_SERVER_PORT}, not starting another."
     )
 
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.object.delete(use_global=False)
 
 wait_for_model_fbx()
