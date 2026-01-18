@@ -7,11 +7,8 @@ import type { UserProgressDoc } from "@/lib/db/types";
 export async function POST(req: Request) {
   const { questionName, passed, numberOfActions, timeTaken, score } = await req.json();
 
-  console.log(questionName);
-  console.log(passed);
-  console.log(numberOfActions);
-  console.log(timeTaken);
-  console.log(score);
+  if (passed === "True") passed = true
+  else if (passed === "False") passed = false;
 
   const db = await getDb();
   const userId = "default";

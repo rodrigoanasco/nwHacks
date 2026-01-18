@@ -467,6 +467,25 @@ class SubmitButton(bpy.types.Operator):
             context.scene.submit_button_text = "Try Again"
 
         number_of_actions, operators_string = filtered_operators_len_and_string()
+
+        score = (
+            100
+            * ((expectedNumOfActions / number_of_actions) * 0.5)
+            * ((expectedCompletionTime / total_time) * 0.5)
+        )
+
+        submission_info = {
+            "questionName": questionName,
+            "passed": str(True if all_faces_ok else False),
+            "numberOfActions": str(number_of_actions),
+            "timeTaken": str(total_time),
+            "score": str(score),
+        }
+
+        print(submission_info)
+
+        requests.post("http://localhost:3000/api/submit", json=submission_info)
+
         if all_faces_ok:
             # Prepare an LLM prompt summarizing the submission for feedback
             prompt = f"""
@@ -534,24 +553,6 @@ class SubmitButton(bpy.types.Operator):
         # On success, reset start_time for a fresh session
         if all_faces_ok:
             start_time = get_current_timestamp()
-
-        score = (
-            100
-            * ((expectedNumOfActions / number_of_actions) * 0.5)
-            * ((expectedCompletionTime / total_time) * 0.5)
-        )
-
-        submission_info = {
-            "questionName": questionName,
-            "passed": str(True if all_faces_ok else False),
-            "numberOfActions": str(number_of_actions),
-            "timeTaken": str(total_time),
-            "score": str(score),
-        }
-
-        print(submission_info)
-
-        requests.post("http://localhost:3000/api/submit", json=submission_info)
 
         return {"FINISHED"}
 
