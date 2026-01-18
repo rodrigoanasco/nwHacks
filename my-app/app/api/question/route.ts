@@ -39,6 +39,7 @@ export async function POST(req: Request) {
   }
 
   const payload = {
+    name,
     expectedCompletionTime: doc.expectedCompletionTime ?? null,
     expectedNumOfActions: doc.expectedNumOfActions ?? null,
     objects: Array.isArray(doc.objects) ? doc.objects : [],

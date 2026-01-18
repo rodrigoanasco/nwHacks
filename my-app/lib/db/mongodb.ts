@@ -1,4 +1,5 @@
 import { MongoClient } from "mongodb";
+import { resetDefaultUserProgress } from "@/lib/db/resetDefault";
 
 function buildMongoUri() {
   const user = process.env.MONGO_USERNAME;
@@ -9,7 +10,6 @@ function buildMongoUri() {
   if (!pass) throw new Error("Missing MONGO_PASSWORD in .env.local");
   if (!host) throw new Error("Missing MONGODB_HOST in .env.local");
 
-  // IMPORTANT: encode in case password has special chars
   const u = encodeURIComponent(user);
   const p = encodeURIComponent(pass);
 
@@ -20,6 +20,9 @@ const uri = buildMongoUri();
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
+
+// run-once-per-process guard
+let didResetDefault = false;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -42,5 +45,17 @@ export async function getDb() {
   if (!dbName) throw new Error("Missing MONGODB_DB in .env.local");
 
   const client = await clientPromise;
-  return client.db(dbName);
+  const db = client.db(dbName);
+
+  // SAFEST PRACTICAL: dev-only + run once per server process
+  if (process.env.NODE_ENV === "development" && !didResetDefault) {
+    didResetDefault = true;
+    try {
+      await resetDefaultUserProgress(db);
+    } catch (e) {
+      console.error("resetDefaultUserProgress failed:", e);
+    }
+  }
+
+  return db;
 }
