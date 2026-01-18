@@ -1,29 +1,20 @@
 # bleet
-**Grind Smarter.**
-![Logo](rm_img/bleet_logo.png)
-
+**Grind Blender Smarter.**
+<br>
+<p align=center>
+<img src=rm_img/updated_updated_logo.png/>
+</p>
 
 ## Inspiration
+When many people start learning Blender (a free and open-source 3D modeling tool), they often begin with Blender Guru’s donut series.
 
-When many people start learning Blender (a free and open-source 3D modeling tool), they often begin with **Blender Guru’s donut series**. It’s a fantastic introduction, but after finishing it, we realized something frustrating:
+It’s a great introduction, but once it ends, many learners realize something frustrating: they feel like they understand Blender... until they try to model something on their own. Suddenly, even simple objects require another YouTube tutorial, and they’re stuck in tutorial hell. 
 
-We *felt* like we knew Blender… until we tried to model something on our own.
+This experience is surprisingly similar to learning data structures and algorithms: the theory makes sense, but when the co-op interview comes, it all falls apart. 
 
-Suddenly, we were stuck in **tutorial hell** unable to model even a simple object (like a car) without opening YouTube.
+The difference between understanding and mastery is practice. So we asked ourselves—what if learning Blender worked the same way people practice LeetCode? 
 
-That feeling felt *very* familiar.
-
-It’s the same experience people have when learning **data structures and algorithms**:  
-You understand the theory… until the co-op interview. Then—uh oh—there goes your internship.
-
-How do people fix that?  
-The key is **practice**.
-
-So we asked ourselves:
-
-> **What if Blender learning worked the same way?**
-
-That’s how **bElite** was born.
+That question is what led to the creation of bElite.
 
 ---
 
@@ -46,8 +37,77 @@ The workflow is simple:
 7. Move on and keep grinding
 
 ---
+## Features
+### Interactive Challenges:
+<p align="center">
+  <img src="rm_img/Problems.png" width="600"/>
+</p>
+
+- Easy, Medium, and Hard problems
+- Track attempts and completion status
+- Designed to build intuition, not memorization
+
+<br>
+
+### Reference Modeling Loading
+Each problem loads a **target model** directly into Blender as a wireframe reference.
+<p align="center">
+  <img src="rm_img/Loaded_Model.png" width="600"/>
+</p>
+
+- Clear spatial reference
+- Encourages correct proportions and topology
+- No guessing what the final shape should be
+
+<br>
+
+### Incorrect Submission Detection
+When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
+
+<p align="center">
+  <img src="rm_img/Incorrect_Submitted_Model_Updated.png" width="600"/>
+</p>
+
+- Faces turn **red** when vertices don’t align
+- Makes debugging geometry intuitive
+- Prevents “looks right but isn’t” mistakes
+
+<br>
+
+### Vertex-Level Correctness Feedback
+When parts of your model match the target, faces turn **green**, letting you know exactly what’s correct.
+
+<p align="center">
+  <img src="rm_img/Hard_Problem_3D_Model.png" width="600"/>
+</p>
+
+- Green = correct geometry
+- Red = incorrect geometry
+- Learn *where* you’re wrong, not just *that* you’re wrong
+
+<br>
+
+### AI-Powered Hints (Multimodal)
+Get contextual hints powered by a **multimodal LLM**.
+<p align="center">
+  <img src="rm_img/updated_AI_Hint.png" width="600"/>
+</p>
+
+- Uses:
+  - Current mesh state
+  - User action history
+  - Viewport screenshot
+- Gives guidance, not full solutions
+- Limited hints to encourage problem-solving
+
+---
 
 ## How We Built It
+Fully integrated system from frontend → backend → Blender → AI.
+
+<p align="center">
+  <img src="rm_img/Architecture.png" width="900"/>
+</p>
 
 ### Blender Add-on
 - Written entirely in **Python**
@@ -65,11 +125,9 @@ The workflow is simple:
 - Accepts JSON describing a target object
 - Converts that JSON into an **FBX file** that Blender can load
 
-> This server runs on a separate thread **inside Blender** so it can safely call Blender functions like `load_model`.
 
 ### LLM Hints (Local, Multimodal)
 - Uses **LLaVA** via **Ollama**
-- Runs **locally**
 - When a hint is requested:
   - Sends object transforms (position, rotation, scale)
   - Sends modeling action history
@@ -88,6 +146,4 @@ The workflow is simple:
     - Pass/fail status
     - User progress
 
-
-**bElite** is about escaping tutorial hell—and actually learning Blender by doing.
 
