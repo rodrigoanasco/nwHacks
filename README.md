@@ -46,6 +46,65 @@ The workflow is simple:
 7. Move on and keep grinding
 
 ---
+## Features
+- Interactive Challenges:
+<p align="center">
+  <img src="rm_img/Problems.png" width="800"/>
+</p>
+
+- Easy, Medium, and Hard problems
+- Track attempts and completion status
+- Designed to build intuition, not memorization
+
+- Reference Modeling Loading
+Each problem loads a **target model** directly into Blender as a wireframe reference.
+<p align="center">
+  <img src="rm_img/Loaded_Model.png" width="800"/>
+</p>
+
+- Clear spatial reference
+- Encourages correct proportions and topology
+- No guessing what the final shape should be
+
+
+- Incorrect Submission Detection
+When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
+
+<p align="center">
+  <img src="rm_img/Incorrect_Submitted_Model.png" width="800"/>
+</p>
+
+- Faces turn **red** when vertices don’t align
+- Makes debugging geometry intuitive
+- Prevents “looks right but isn’t” mistakes
+
+- Vertex-Level Correctness Feedback
+When parts of your model match the target, faces turn **green**, letting you know exactly what’s correct.
+
+<p align="center">
+  <img src="rm_img/Hard_Problem_3D_Model.png" width="800"/>
+</p>
+
+- Green = correct geometry
+- Red = incorrect geometry
+- Learn *where* you’re wrong, not just *that* you’re wrong
+
+
+- AI-Powered Hints (Multimodal)
+Get contextual hints powered by a **multimodal LLM**.
+<p align="center">
+  <img src="rm_img/updated_AI_Hint.png" width="800"/>
+</p>
+
+- Uses:
+  - Current mesh state
+  - User action history
+  - Viewport screenshot
+- Gives guidance, not full solutions
+- Limited hints to encourage problem-solving
+
+---
+
 
 ## How We Built It
 
