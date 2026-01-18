@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/mongodb";
-import { COLLECTIONS} from "@/lib/db/collections";
+import { COLLECTIONS } from "@/lib/db/collections";
 
-export async function GET(req: Request) {
+export async function POST(req: Request) {
   // 1) Read body
   let body: any;
+
   try {
     body = await req.json();
   } catch {
