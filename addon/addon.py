@@ -4,10 +4,12 @@ import os
 import json
 import bmesh
 import blf
-from langchain_ollama import ChatOllama
+import requests
 
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
+
+hints_remaining = 3
 
 
 class SubmitButton(bpy.types.Operator):
@@ -129,6 +131,8 @@ class HintButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
+        global hints_remaining
+
         # Get the information on the user object
         user_object = None
         target_object = None
@@ -175,20 +179,22 @@ class HintButton(bpy.types.Operator):
         Please provide them with information about how they can continue on. Do not give them the answer.
         """
 
-        llm = ChatOllama(
-            model="llama3.1",
-            temperature=0,
-        )
+        # llm = ChatOllama(
+        #     model="llama3.1",
+        #     temperature=0,
+        # )
 
-        messages = [
-            (
-                "system",
-                "You are a helpful assistant that translates English to French. Translate the user sentence.",
-            ),
-            ("", "I love programming."),
-        ]
-        ai_msg = llm.invoke(messages)
-        print(ai_msg.content)
+        # messages = [
+        #     (
+        #         "system",
+        #         "You are a helpful assistant that translates English to French. Translate the user sentence.",
+        #     ),
+        #     ("", "I love programming."),
+        # ]
+        # ai_msg = llm.invoke(messages)
+        # print(ai_msg.content)
+
+        hints_remaining -= 1
 
         return {"FINISHED"}
 
@@ -204,6 +210,7 @@ class Panel(bpy.types.Panel):
         layout = self.layout
         if layout is None:
             return
+        layout.label(text=f"Hints remaining: {hints_remaining}")
         layout.operator(HintButton.bl_idname, text="Hint")
         layout.operator(SubmitButton.bl_idname, text="Submit")
 
@@ -270,8 +277,4 @@ def draw_lengths():
 
 
 load_model()
-bpy.types.Scene.edge_draw_handler = bpy.types.SpaceView3D.draw_handler_add(
-    draw_lengths, (), "WINDOW", "POST_PIXEL"
-)
-
 register_panel()
