@@ -29,6 +29,10 @@ import logging
 IMPORTED_OBJECT_NAME = "TARGET"
 TOLERANCE = 0.1
 
+expected_completion_time = 0
+expected_number_of_actions = 0
+
+total_time = 0
 time_sums = 0
 
 hints_remaining = 3
@@ -261,7 +265,10 @@ class SubmitButton(bpy.types.Operator):
         return context.mode == "OBJECT"
 
     def execute(self, context):
-        global submitted, time_sums, start_time
+        global submitted, time_sums, start_time, expected_number_of_actions, expected_completion_time, total_time
+
+        print(expected_number_of_actions)
+        print(expected_completion_time)
 
         if submitted:
             reset_viewport()
@@ -457,10 +464,10 @@ class SubmitButton(bpy.types.Operator):
                 print("Failed to register poll timer on submit:", e)
 
         submission_info = {
-            "userId": str(123),
             "questionName": "House_1",
             "passed": str(True if all_faces_ok else False),
-            # "number_of_actions": str(number_of_actions),
+            "numberOfActions": str(number_of_actions),
+            "timeTaken": str(total_time),
         }
 
         # Include timing information when the submission passed
@@ -737,6 +744,7 @@ app = FastAPI()
 # Paths (relative to addon/)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 JSON_INPUT_DIR = os.path.join(BASE_DIR, "json_inputs_test")
+EXTRA_INFORMATION_JSON_DIR = os.path.join(BASE_DIR, "extra_information_json")
 FBX_OUTPUT_DIR = os.path.join(BASE_DIR, "json_output_test")
 CONVERTER_SCRIPT = os.path.join(BASE_DIR, "converters", "json_to_fbx.py")
 
@@ -745,11 +753,14 @@ os.makedirs(FBX_OUTPUT_DIR, exist_ok=True)
 
 
 class ConvertRequest(BaseModel):
+    expectedCompletionTime: int
+    expectedNumOfActions: int
     objects: list
 
 
 @app.post("/convert")
 def convert_json_to_fbx(payload: ConvertRequest):
+    global expected_completion_time, expected_number_of_actions  # Add this line
     job_id = str(uuid.uuid4())
 
     json_path = os.path.join(JSON_INPUT_DIR, f"{job_id}.json")
@@ -757,7 +768,20 @@ def convert_json_to_fbx(payload: ConvertRequest):
 
     # Save JSON
     with open(json_path, "w") as f:
-        json.dump(payload.dict(), f, indent=2)
+        json.dump(payload.dict()["objects"], f, indent=2)
+
+    other_information_json_path = os.path.join(EXTRA_INFORMATION_JSON_DIR, f"info.json")
+    with open(other_information_json_path, "w") as f:
+        json.dump(
+            {
+                "expectedCompletionTime": payload.dict()["expectedCompletionTime"],
+                "expectedNumOfActions": payload.dict()["expectedNumOfActions"],
+            },
+            f,
+            indent=2,
+        )
+
+    print(payload)
 
     # Call Blender
     cmd = [
@@ -811,6 +835,7 @@ def _is_port_in_use(host: str, port: int) -> bool:
         return False
 
 
+draw_lengths()
 load_model()
 register_panel()
 
