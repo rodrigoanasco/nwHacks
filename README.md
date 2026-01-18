@@ -65,7 +65,7 @@ Each problem loads a **target model** directly into Blender as a wireframe refer
 When the submitted model doesn’t match the target within tolerance, bElite gives immediate visual feedback.
 
 <p align="center">
-  <img src="rm_img/Incorrect_Submitted_Model.png" width="600"/>
+  <img src="rm_img/Incorrect_Submitted_Model_Updated.png" width="600"/>
 </p>
 
 - Faces turn **red** when vertices don’t align
