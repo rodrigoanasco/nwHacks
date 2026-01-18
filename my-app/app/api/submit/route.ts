@@ -5,7 +5,7 @@ import type { UserProgressDoc } from "@/lib/db/types";
 
 
 export async function POST(req: Request) {
-  const { questionName, passed, numberOfActions, timeTaken, score } = await req.json();
+  let { questionName, passed, numberOfActions, timeTaken, score } = await req.json();
 
   if (passed === "True") passed = true
   else if (passed === "False") passed = false;

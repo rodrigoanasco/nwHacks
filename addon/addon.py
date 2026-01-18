@@ -41,6 +41,8 @@ bpy.types.Scene.show_llm_in_panel = bpy.props.BoolProperty(default=False)
 bpy.types.Scene.llm_loading = bpy.props.BoolProperty(default=False)
 # Title/header to show above the LLM response (can be used for hints vs submit feedback)
 bpy.types.Scene.llm_response_title = bpy.props.StringProperty(default="")
+# Track whether the last submission passed (all faces correct)
+bpy.types.Scene.last_submission_passed = bpy.props.BoolProperty(default=False)
 # When true, replace the entire UI panel with a loading label / LLM response
 bpy.types.Scene.replace_with_llm = bpy.props.BoolProperty(default=False)
 
@@ -463,6 +465,10 @@ class SubmitButton(bpy.types.Operator):
         total_time = elapsed
 
         submitted = True
+        try:
+            context.scene.last_submission_passed = all_faces_ok
+        except Exception:
+            pass
         if not all_faces_ok:
             context.scene.submit_button_text = "Try Again"
 
@@ -695,6 +701,101 @@ class LLMResponsePopup(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class ResetButton(bpy.types.Operator):
+    """Reset the workspace. If the last submission passed, perform a full reset and
+    delete generated files; otherwise perform a lightweight viewport reset."""
+
+    bl_idname = "object.reset_operator"
+    bl_label = "Reset"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        # Always allow reset from the UI
+        return True
+
+    def execute(self, context):
+        global submitted, start_time, hints_remaining
+
+        try:
+            last_passed = bool(getattr(context.scene, "last_submission_passed", False))
+        except Exception:
+            last_passed = False
+
+        if last_passed:
+            # Full reset: delete all Blender objects and clear generated files
+            try:
+                bpy.ops.object.select_all(action="SELECT")
+                bpy.ops.object.delete(use_global=False)
+            except Exception:
+                pass
+
+            # Remove generated files (JSON/FBX/extra info/screenshots)
+            try:
+                paths_to_clear = [
+                    JSON_INPUT_DIR,
+                    FBX_OUTPUT_DIR,
+                    EXTRA_INFORMATION_JSON_DIR,
+                    os.path.join(BASE_DIR, "images", "images"),
+                ]
+                for d in paths_to_clear:
+                    if d and os.path.exists(d):
+                        for fname in os.listdir(d):
+                            fpath = os.path.join(d, fname)
+                            try:
+                                if os.path.isfile(fpath):
+                                    os.remove(fpath)
+                            except Exception:
+                                pass
+            except Exception:
+                pass
+
+            # Reset globals and scene state
+            submitted = False
+            start_time = get_current_timestamp()
+            hints_remaining = 3
+
+            for sc in bpy.data.scenes:
+                try:
+                    sc.submit_button_text = "Submit"
+                except Exception:
+                    pass
+                try:
+                    sc.llm_response = ""
+                except Exception:
+                    pass
+                try:
+                    sc.show_llm_in_panel = False
+                except Exception:
+                    pass
+                try:
+                    sc.llm_loading = False
+                except Exception:
+                    pass
+                try:
+                    sc.replace_with_llm = False
+                except Exception:
+                    pass
+                try:
+                    sc.llm_response_title = ""
+                except Exception:
+                    pass
+                try:
+                    sc.last_submission_passed = False
+                except Exception:
+                    pass
+
+            return {"FINISHED"}
+
+        # Lightweight reset when not passed
+        reset_viewport()
+        try:
+            context.scene.submit_button_text = "Submit"
+        except Exception:
+            pass
+        return {"FINISHED"}
+
+
 class Panel(bpy.types.Panel):
     bl_label = "Panel"
     bl_idname = "PT_SimplePanel"
@@ -712,6 +813,9 @@ class Panel(bpy.types.Panel):
         if getattr(context.scene, "replace_with_llm", False):
             if getattr(context.scene, "llm_loading", False):
                 layout.label(text="Loading...")
+                # Always show Reset so user can clear state without restarting
+                layout.separator()
+                layout.operator(ResetButton.bl_idname, text="Reset")
                 return
 
             if context.scene.llm_response:
@@ -749,8 +853,12 @@ class Panel(bpy.types.Panel):
 
                 for line in wrapped_lines:
                     layout.label(text=line)
-            else:
-                layout.label(text="No response yet")
+                else:
+                    layout.label(text="No response yet")
+
+            # Always show Reset so user can clear state without restarting
+            layout.separator()
+            layout.operator(ResetButton.bl_idname, text="Reset")
 
             return
 
@@ -811,9 +919,11 @@ class Panel(bpy.types.Panel):
         layout.operator(
             SubmitButton.bl_idname, text=bpy.context.scene.submit_button_text
         )
+        # Always provide Reset button so users don't need to restart the addon
+        layout.operator(ResetButton.bl_idname, text="Reset")
 
 
-classes = [Panel, HintButton, SubmitButton, LLMResponsePopup]
+classes = [Panel, HintButton, SubmitButton, LLMResponsePopup, ResetButton]
 
 
 def register_panel():
@@ -827,6 +937,11 @@ def register_panel():
         sc.llm_loading = False
         sc.replace_with_llm = False
         sc.llm_response_title = ""
+        # initialize last submission flag
+        try:
+            sc.last_submission_passed = False
+        except Exception:
+            pass
 
 
 def unregister_panel():
@@ -1048,26 +1163,6 @@ def _is_port_in_use(host: str, port: int) -> bool:
         return True
     except Exception:
         return False
-
-
-import time
-
-
-# def wait_for_model_fbx():
-# """Wait until model.fbx exists, checking every 0.5 seconds."""
-# fbx_path = os.path.join(FBX_OUTPUT_DIR, "model.fbx")
-# max_wait = 60  # Maximum 60 seconds
-# elapsed = 0
-# print(os.path.exists(fbx_path))
-# while not os.path.exists(fbx_path) and elapsed < max_wait:
-#     time.sleep(1.5)
-#     elapsed += 1.5
-
-# time.sleep(2)
-# if os.path.exists(fbx_path):
-#     load_model(fbx_path)
-# else:
-#     print(f"Timeout waiting for model.fbx after {max_wait} seconds")
 
 
 register_panel()
