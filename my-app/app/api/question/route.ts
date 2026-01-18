@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/db/mongodb";
+import { COLLECTIONS} from "@/lib/db/collections";
 
-export async function POST(req: Request) {
+export async function GET(req: Request) {
   // 1) Read body
   let body: any;
   try {
@@ -18,8 +19,7 @@ export async function POST(req: Request) {
   // 2) Load from Mongo
   const db = await getDb();
 
-  const collectionName = process.env.MONGODB_COLLECTION ?? "test";
-  const doc = await db.collection(collectionName).findOne(
+  const doc = await db.collection(COLLECTIONS.QUESTIONS).findOne(
     { name },
     { projection: { _id: 0, objects: 1 } }
   );
