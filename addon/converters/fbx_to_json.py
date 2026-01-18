@@ -10,8 +10,8 @@ except Exception:
 
 # Use fixed paths inside the addon folder
 base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-fbx_path = os.path.join(base_dir, "test.fbx")
-json_path = os.path.join(base_dir, "test.json")
+fbx_path = os.path.join(base_dir, "easy.fbx")
+json_path = os.path.join(base_dir, "easy.json")
 
 
 # Start from a clean scene without removing view layers (avoids missing view_layer in background)
@@ -55,20 +55,17 @@ for obj in list(scene.objects):
     if mesh is None:
         continue
 
-    # Ensure loop triangles are calculated so we have triangles for faces
-    mesh.calc_loop_triangles()
-
     # Collect transformed vertex coordinates (world space)
     verts = []
     for v in mesh.vertices:
         co = obj.matrix_world @ v.co
         verts.append([float(co.x), float(co.y), float(co.z)])
 
-    # Collect triangle faces
+    # Collect polygon faces (preserve quads/ngons when available)
     faces = []
-    for tri in mesh.loop_triangles:
-        # tri.vertices is a tuple of 3 vertex indices
-        faces.append([int(tri.vertices[0]), int(tri.vertices[1]), int(tri.vertices[2])])
+    for poly in mesh.polygons:
+        verts_idx = [int(i) for i in poly.vertices]
+        faces.append(verts_idx)
 
     objects_out.append({"name": obj.name, "vertices": verts, "faces": faces})
 

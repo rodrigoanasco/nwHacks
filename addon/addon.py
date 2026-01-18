@@ -982,7 +982,7 @@ import time
 
 def wait_for_model_fbx():
     """Wait until model.fbx exists, checking every 0.5 seconds."""
-    fbx_path = os.path.join(FBX_OUTPUT_DIR, "test.fbx")
+    fbx_path = os.path.join(FBX_OUTPUT_DIR, "model.fbx")
     max_wait = 60  # Maximum 60 seconds
     elapsed = 0
     print(os.path.exists(fbx_path))
